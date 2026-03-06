@@ -152,10 +152,10 @@ export interface ClientGameState {
 }
 
 export const SEAT_NAMES_HE: Record<SeatPosition, string> = {
-  south: 'דרום',
-  north: 'צפון',
-  east: 'מזרח',
-  west: 'מערב',
+  south: 'קבוצה A - שחקן 1',
+  north: 'קבוצה A - שחקן 2',
+  east: 'קבוצה B - שחקן 1',
+  west: 'קבוצה B - שחקן 2',
 };
 
 export const CARD_POWER: Record<Rank, number> = {

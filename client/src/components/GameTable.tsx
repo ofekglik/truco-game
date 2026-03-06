@@ -533,12 +533,12 @@ export const GameTable: React.FC<GameTableProps> = ({
 
           <div className="grid grid-cols-2 gap-4 mb-4">
             <div className="bg-blue-900/30 rounded-lg p-3 text-center border border-blue-700">
-              <p className="text-blue-400 text-sm mb-1">קבוצה 1</p>
+              <p className="text-blue-400 text-sm mb-1">קבוצה A</p>
               <p className="text-2xl font-bold text-white">{lastRound.team1Total}</p>
               <p className="text-xs text-gray-400">לקיחות: {lastRound.team1TrickPoints} | שירה: {lastRound.team1SingingPoints}</p>
             </div>
             <div className="bg-red-900/30 rounded-lg p-3 text-center border border-red-700">
-              <p className="text-red-400 text-sm mb-1">קבוצה 2</p>
+              <p className="text-red-400 text-sm mb-1">קבוצה B</p>
               <p className="text-2xl font-bold text-white">{lastRound.team2Total}</p>
               <p className="text-xs text-gray-400">לקיחות: {lastRound.team2TrickPoints} | שירה: {lastRound.team2SingingPoints}</p>
             </div>
@@ -554,12 +554,12 @@ export const GameTable: React.FC<GameTableProps> = ({
             <p className="text-center text-gray-300 text-sm">ניקוד מצטבר</p>
             <div className="flex justify-around mt-2">
               <div className="text-center">
-                <p className="text-blue-400 text-xs">קבוצה 1</p>
+                <p className="text-blue-400 text-xs">קבוצה A</p>
                 <p className="text-xl font-bold text-white">{gameState.scores.team1}</p>
               </div>
               <div className="text-yellow-500 text-xl">—</div>
               <div className="text-center">
-                <p className="text-red-400 text-xs">קבוצה 2</p>
+                <p className="text-red-400 text-xs">קבוצה B</p>
                 <p className="text-xl font-bold text-white">{gameState.scores.team2}</p>
               </div>
             </div>
@@ -595,23 +595,65 @@ export const GameTable: React.FC<GameTableProps> = ({
   const renderGameOver = () => {
     if (gameState.phase !== GamePhase.GAME_OVER) return null;
     const team1Wins = gameState.scores.team1 >= gameState.targetScore;
-    const winnerTeam = team1Wins ? 'קבוצה 1' : 'קבוצה 2';
+    const winnerTeam = team1Wins ? 'קבוצה A' : 'קבוצה B';
     const winnerColor = team1Wins ? 'text-blue-400' : 'text-red-400';
+    const winnerBg = team1Wins ? 'from-blue-900/50 to-blue-800/50' : 'from-red-900/50 to-red-800/50';
 
     return (
-      <div className="absolute inset-0 z-50 bg-black/80 flex items-center justify-center backdrop-blur-sm">
-        <div className="text-center">
-          <h2 className={`text-5xl font-bold mb-4 ${winnerColor}`}>🎉 {winnerTeam} ניצחה! 🎉</h2>
-          <div className="bg-[#16213e] border border-[#4a5a7e] rounded-2xl p-8 w-full max-w-sm shadow-2xl">
-            <div className="grid grid-cols-2 gap-4 mb-6">
-              <div className="bg-blue-900/30 rounded-lg p-4 text-center border border-blue-700">
-                <p className="text-blue-400 text-sm mb-2">קבוצה 1</p>
-                <p className="text-4xl font-bold text-white">{gameState.scores.team1}</p>
+      <div className="fixed inset-0 z-50 bg-black/85 flex items-center justify-center backdrop-blur-md p-4">
+        <div className="w-full max-w-sm">
+          {/* Trophy + winner */}
+          <div className="text-center mb-6">
+            <div className="text-6xl mb-3">🏆</div>
+            <h2 className={`text-3xl font-bold ${winnerColor}`}>{winnerTeam} ניצחה!</h2>
+          </div>
+
+          <div className="bg-[#16213e] border border-[#4a5a7e] rounded-2xl p-6 shadow-2xl">
+            {/* Final scores */}
+            <div className="grid grid-cols-2 gap-3 mb-4">
+              <div className={`bg-gradient-to-br ${team1Wins ? 'from-blue-800/60 to-blue-900/60 border-blue-500 ring-2 ring-blue-400/50' : 'from-blue-900/30 to-blue-900/20 border-blue-700'} rounded-xl p-4 text-center border`}>
+                <p className="text-blue-400 text-xs font-medium mb-1">קבוצה A</p>
+                <p className="text-3xl font-bold text-white">{gameState.scores.team1}</p>
               </div>
-              <div className="bg-red-900/30 rounded-lg p-4 text-center border border-red-700">
-                <p className="text-red-400 text-sm mb-2">קבוצה 2</p>
-                <p className="text-4xl font-bold text-white">{gameState.scores.team2}</p>
+              <div className={`bg-gradient-to-br ${!team1Wins ? 'from-red-800/60 to-red-900/60 border-red-500 ring-2 ring-red-400/50' : 'from-red-900/30 to-red-900/20 border-red-700'} rounded-xl p-4 text-center border`}>
+                <p className="text-red-400 text-xs font-medium mb-1">קבוצה B</p>
+                <p className="text-3xl font-bold text-white">{gameState.scores.team2}</p>
               </div>
+            </div>
+
+            <p className="text-gray-500 text-xs text-center mb-4">יעד: {gameState.targetScore} נקודות</p>
+
+            {/* Round history summary */}
+            {gameState.roundHistory.length > 0 && (
+              <div className="bg-black/30 rounded-lg p-3 mb-4 max-h-32 overflow-y-auto">
+                <p className="text-gray-400 text-xs font-medium mb-2">סיכום סיבובים:</p>
+                {gameState.roundHistory.map((r, i) => (
+                  <div key={i} className="flex justify-between text-xs py-0.5">
+                    <span className="text-gray-500">סיבוב {i + 1}</span>
+                    <span>
+                      <span className="text-blue-400">{r.team1Total}</span>
+                      <span className="text-gray-600 mx-1">-</span>
+                      <span className="text-red-400">{r.team2Total}</span>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Action buttons */}
+            <div className="flex flex-col gap-2">
+              <button
+                onClick={onNextRound}
+                className="w-full py-3 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-400 hover:to-green-500 text-white font-bold rounded-xl transition-all shadow-lg hover:shadow-green-500/30"
+              >
+                🔄 שחק שוב (אותו חדר)
+              </button>
+              <button
+                onClick={handleLeaveRoom}
+                className="w-full py-3 bg-gray-700 hover:bg-gray-600 text-white font-bold rounded-xl transition-colors"
+              >
+                ← חזור ללובי
+              </button>
             </div>
           </div>
         </div>

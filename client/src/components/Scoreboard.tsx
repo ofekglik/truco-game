@@ -17,11 +17,11 @@ export const Scoreboard: React.FC<ScoreboardProps> = ({ gameState, onClose }) =>
       {/* Current scores */}
       <div className="grid grid-cols-2 gap-4 mb-4">
         <div className="bg-blue-900/30 rounded-lg p-3 text-center border border-blue-700">
-          <p className="text-blue-400 text-sm">קבוצה 1</p>
+          <p className="text-blue-400 text-sm">קבוצה A</p>
           <p className="text-3xl font-bold text-white">{gameState.scores.team1}</p>
         </div>
         <div className="bg-red-900/30 rounded-lg p-3 text-center border border-red-700">
-          <p className="text-red-400 text-sm">קבוצה 2</p>
+          <p className="text-red-400 text-sm">קבוצה B</p>
           <p className="text-3xl font-bold text-white">{gameState.scores.team2}</p>
         </div>
       </div>

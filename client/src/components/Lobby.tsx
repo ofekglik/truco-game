@@ -1,20 +1,29 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
 interface LobbyProps {
   onCreateRoom: (name: string, targetScore?: number, avatar?: string) => void;
   onJoinRoom: (code: string, name: string, avatar?: string) => void;
   error: string | null;
   connected: boolean;
+  prefillRoomCode?: string;
 }
 
 const AVATARS = ['🦁', '🐺', '🦊', '🐸', '🦉', '🐯', '🦅', '🐻', '🎭', '👑', '🎪', '🎯'];
 
-export const Lobby: React.FC<LobbyProps> = ({ onCreateRoom, onJoinRoom, error, connected }) => {
+export const Lobby: React.FC<LobbyProps> = ({ onCreateRoom, onJoinRoom, error, connected, prefillRoomCode }) => {
   const [name, setName] = useState('');
-  const [roomCode, setRoomCode] = useState('');
+  const [roomCode, setRoomCode] = useState(prefillRoomCode || '');
   const [targetScore, setTargetScore] = useState(1000);
   const [selectedAvatar, setSelectedAvatar] = useState(AVATARS[0]);
-  const [mode, setMode] = useState<'menu' | 'create' | 'join'>('menu');
+  const [mode, setMode] = useState<'menu' | 'create' | 'join'>(prefillRoomCode ? 'join' : 'menu');
+
+  // If prefillRoomCode arrives after mount
+  useEffect(() => {
+    if (prefillRoomCode) {
+      setRoomCode(prefillRoomCode);
+      setMode('join');
+    }
+  }, [prefillRoomCode]);
 
   const handleCreate = () => {
     if (name.trim()) onCreateRoom(name.trim(), targetScore, selectedAvatar);

@@ -100,6 +100,11 @@ export function useSocket() {
 
   const leaveRoom = useCallback(() => {
     socketRef.current?.emit('leaveRoom');
+    // Clear local state so user returns to lobby
+    setRoomInfo(null);
+    roomInfoRef.current = null;
+    setGameState(null);
+    setError(null);
   }, []);
 
   return {
