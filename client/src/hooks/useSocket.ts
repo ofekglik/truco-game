@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
-import { ClientGameState, Suit, SeatPosition } from '../types';
+import { ClientGameState, Suit, SeatPosition, RoomSummary } from '../types';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 
 interface RoomInfo {
@@ -17,6 +17,7 @@ export function useSocket() {
   const [gameState, setGameState] = useState<ClientGameState | null>(null);
   const [roomInfo, setRoomInfo] = useState<RoomInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [roomsList, setRoomsList] = useState<RoomSummary[]>([]);
 
   useEffect(() => {
     const setupSocket = async () => {
@@ -61,6 +62,7 @@ export function useSocket() {
         setError(null);
       });
       socket.on('roomError', (msg: string) => setError(msg));
+      socket.on('roomsList', (rooms: RoomSummary[]) => setRoomsList(rooms));
 
       return () => {
         socket.disconnect();
@@ -70,12 +72,16 @@ export function useSocket() {
     setupSocket();
   }, []);
 
-  const createRoom = useCallback((name: string, targetScore?: number, avatar?: string) => {
-    socketRef.current?.emit('createRoom', name, targetScore, avatar || '');
+  const createRoom = useCallback((name: string, targetScore?: number, avatar?: string, password?: string) => {
+    socketRef.current?.emit('createRoom', name, targetScore, avatar || '', password || undefined);
   }, []);
 
-  const joinRoom = useCallback((code: string, name: string, avatar?: string) => {
-    socketRef.current?.emit('joinRoom', { roomCode: code, playerName: name, avatar: avatar || '' });
+  const joinRoom = useCallback((code: string, name: string, avatar?: string, password?: string) => {
+    socketRef.current?.emit('joinRoom', { roomCode: code, playerName: name, avatar: avatar || '', password: password || undefined });
+  }, []);
+
+  const fetchRoomsList = useCallback(() => {
+    socketRef.current?.emit('listRooms');
   }, []);
 
   const startGame = useCallback(() => {
@@ -133,8 +139,10 @@ export function useSocket() {
     gameState,
     roomInfo,
     error,
+    roomsList,
     createRoom,
     joinRoom,
+    fetchRoomsList,
     startGame,
     placeBid,
     passBid,

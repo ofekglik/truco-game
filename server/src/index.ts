@@ -5,7 +5,7 @@ import cors from 'cors';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import {
-  createRoom, joinRoom, getRoom, getRoomByCode, removePlayer, isRoomFull, swapSeat, updateRoomSettings, leaveRoom, type Room
+  createRoom, joinRoom, getRoom, getRoomByCode, removePlayer, isRoomFull, swapSeat, updateRoomSettings, leaveRoom, listRooms, type Room
 } from './rooms/roomManager.js';
 import {
   startRound, placeBid, declareTrump, singCante, doneSinging, playCard, nextRound, getClientState
@@ -135,8 +135,18 @@ function setUpTurnTimer(room: Room) {
   }
 }
 
+// Broadcast updated room list to all connected sockets (for lobby)
+function broadcastRoomsList() {
+  io.emit('roomsList', listRooms());
+}
+
 io.on('connection', (socket) => {
   console.log(`Player connected: ${socket.id}`);
+
+  // Send room list when a client connects (for lobby)
+  socket.on('listRooms', () => {
+    socket.emit('roomsList', listRooms());
+  });
   
   // Handle reconnection — client sends this when Socket.IO reconnects
   socket.on('rejoinRoom', ({ roomCode, playerName }: { roomCode: string; playerName: string }) => {
@@ -157,8 +167,8 @@ io.on('connection', (socket) => {
     console.log(`[rejoinRoom] success: ${playerName} back in seat ${result.seat}`);
   });
 
-  socket.on('createRoom', (playerName: string, targetScore?: number, avatar?: string) => {
-    const result = createRoom(socket.id, playerName, avatar || '');
+  socket.on('createRoom', (playerName: string, targetScore?: number, avatar?: string, password?: string) => {
+    const result = createRoom(socket.id, playerName, avatar || '', password);
     if (!result) {
       socket.emit('roomError', 'שגיאה ביצירת חדר');
       return;
@@ -174,10 +184,11 @@ io.on('connection', (socket) => {
       playerName,
     });
     broadcastState(result.room);
+    broadcastRoomsList();
   });
   
-  socket.on('joinRoom', ({ roomCode, playerName, avatar }: { roomCode: string; playerName: string; avatar?: string }) => {
-    const result = joinRoom(roomCode, socket.id, playerName, avatar || '');
+  socket.on('joinRoom', ({ roomCode, playerName, avatar, password }: { roomCode: string; playerName: string; avatar?: string; password?: string }) => {
+    const result = joinRoom(roomCode, socket.id, playerName, avatar || '', password);
     if ('error' in result) {
       socket.emit('roomError', result.error);
       return;
@@ -196,8 +207,7 @@ io.on('connection', (socket) => {
     });
 
     broadcastState(result.room);
-
-    // Room creator (admin) starts manually via 'startGame' event
+    broadcastRoomsList();
   });
   
   socket.on('startGame', () => {
@@ -310,6 +320,7 @@ io.on('connection', (socket) => {
       broadcastState(result.room);
     }
     socket.leave('*');
+    broadcastRoomsList();
   });
 
   socket.on('disconnect', () => {
@@ -319,6 +330,7 @@ io.on('connection', (socket) => {
       io.to(result.room.code).emit('playerLeft', { seat: result.seat });
       broadcastState(result.room);
     }
+    broadcastRoomsList();
   });
 });
 

@@ -96,15 +96,16 @@ export const WaitingRoom: React.FC<WaitingRoomProps> = ({
         {/* Action button */}
         <button
           onClick={() => onSwapSeat(seat)}
+          disabled={isMySeat}
           className={`px-3 py-1.5 rounded-lg font-bold text-xs transition-colors whitespace-nowrap flex-shrink-0 ${
             isMySeat
-              ? 'bg-yellow-600 hover:bg-yellow-500 text-black'
+              ? 'bg-yellow-600/50 text-yellow-300 cursor-not-allowed'
               : player
-                ? 'bg-gray-600 hover:bg-gray-500 text-white'
+                ? 'bg-blue-600 hover:bg-blue-500 text-white'
                 : 'bg-green-600 hover:bg-green-500 text-white'
           }`}
         >
-          {isMySeat ? '(אתה)' : player ? 'החלף' : 'הצטרף'}
+          {isMySeat ? '(אתה)' : player ? 'החלף מקום' : 'שב כאן'}
         </button>
       </div>
     );

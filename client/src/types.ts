@@ -151,6 +151,15 @@ export interface ClientGameState {
   validActions: ValidActions;
 }
 
+export interface RoomSummary {
+  code: string;
+  creatorName: string;
+  playerCount: number;
+  maxPlayers: number;
+  targetScore: number;
+  hasPassword: boolean;
+}
+
 export const SEAT_NAMES_HE: Record<SeatPosition, string> = {
   south: 'קבוצה A - שחקן 1',
   north: 'קבוצה A - שחקן 2',

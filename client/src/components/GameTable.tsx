@@ -155,6 +155,13 @@ export const GameTable: React.FC<GameTableProps> = ({
     }
   }, [isMyTurn, selectedCardId, selectedCard]);
 
+  // Keep bidAmount synced with minBid
+  useEffect(() => {
+    if (validActions.minBid > bidAmount) {
+      setBidAmount(validActions.minBid);
+    }
+  }, [validActions.minBid]);
+
   const sortedHand = handOrder
     .map(id => gameState.myHand.find(c => c.id === id))
     .filter((c): c is CardType => c !== undefined);
@@ -353,16 +360,10 @@ export const GameTable: React.FC<GameTableProps> = ({
             animationDelay: `${i * 100}ms`,
           }}
         >
-          <div className="flex flex-col items-center gap-1">
-            <CardComponent
-              card={tc.card}
-              small
-            />
-            {/* Player name label */}
-            <div className="text-xs font-bold text-gray-300 bg-black/50 px-2 py-0.5 rounded whitespace-nowrap">
-              {gameState.players[tc.seat]?.name || tc.seat}
-            </div>
-          </div>
+          <CardComponent
+            card={tc.card}
+            small
+          />
         </div>
       );
     });

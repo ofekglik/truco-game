@@ -46,7 +46,7 @@ export const CardComponent: React.FC<CardProps> = ({ card, playable, selected, o
 
   const containerClasses = `
     relative rounded-lg shadow-lg transition-all duration-200 select-none overflow-hidden
-    ${small ? 'w-14 h-20' : large ? 'w-28 h-40' : 'w-20 h-28'}
+    ${small ? 'w-16 h-[5.5rem]' : large ? 'w-32 h-[11.5rem]' : 'w-[5.5rem] h-[8rem]'}
     ${playable ? 'cursor-pointer hover:-translate-y-3 hover:shadow-xl' : ''}
     ${selected ? '-translate-y-4 ring-2 ring-yellow-400' : ''}
     ${!playable && !small && !isBiddingPhase ? 'opacity-90' : ''}

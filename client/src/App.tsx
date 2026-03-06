@@ -13,6 +13,7 @@ function AppContent() {
   const { user, profile, loading, needsNickname } = useAuth();
   const {
     connected, reconnecting, gameState, roomInfo, error,
+    roomsList, fetchRoomsList,
     createRoom, joinRoom, startGame,
     placeBid, passBid, declareTrump, singCante, doneSinging, playCard, nextRound,
     swapSeat, updateSettings, leaveRoom,
@@ -96,6 +97,8 @@ function AppContent() {
         connected={connected}
         prefillRoomCode={urlRoomCode || undefined}
         onShowProfile={() => setShowProfile(true)}
+        roomsList={roomsList}
+        onFetchRooms={fetchRoomsList}
       />
     );
   }

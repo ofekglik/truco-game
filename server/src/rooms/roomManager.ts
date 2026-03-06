@@ -2,11 +2,23 @@ import { v4 as uuidv4 } from 'uuid';
 import { GameState, SeatPosition, SEAT_ORDER, Player, GamePhase } from '../engine/types.js';
 import { createInitialState } from '../engine/game.js';
 
+export interface RoomSummary {
+  code: string;
+  creatorName: string;
+  playerCount: number;
+  maxPlayers: number;
+  targetScore: number;
+  hasPassword: boolean;
+}
+
 export interface Room {
   code: string;
   state: GameState;
   socketToSeat: Map<string, SeatPosition>;
   seatToSocket: Map<SeatPosition, string>;
+  password?: string;
+  creatorName: string;
+  createdAt: number;
 }
 
 const rooms = new Map<string, Room>();
@@ -21,7 +33,7 @@ function generateRoomCode(): string {
   return code;
 }
 
-export function createRoom(socketId: string, playerName: string, avatar: string = ''): { room: Room; seat: SeatPosition } | null {
+export function createRoom(socketId: string, playerName: string, avatar: string = '', password?: string): { room: Room; seat: SeatPosition } | null {
   let code = generateRoomCode();
   while (rooms.has(code)) code = generateRoomCode();
 
@@ -42,6 +54,9 @@ export function createRoom(socketId: string, playerName: string, avatar: string 
     state,
     socketToSeat: new Map([[socketId, seat]]),
     seatToSocket: new Map([[seat, socketId]]),
+    password: password && password.trim() ? password.trim() : undefined,
+    creatorName: playerName,
+    createdAt: Date.now(),
   };
 
   rooms.set(code, room);
@@ -50,7 +65,7 @@ export function createRoom(socketId: string, playerName: string, avatar: string 
   return { room, seat };
 }
 
-export function joinRoom(roomCode: string, socketId: string, playerName: string, avatar: string = ''): { room: Room; seat: SeatPosition } | { error: string } {
+export function joinRoom(roomCode: string, socketId: string, playerName: string, avatar: string = '', password?: string): { room: Room; seat: SeatPosition } | { error: string } {
   const room = rooms.get(roomCode.toUpperCase());
   if (!room) return { error: 'חדר לא נמצא' };
 
@@ -76,6 +91,13 @@ export function joinRoom(roomCode: string, socketId: string, playerName: string,
       }
     }
     return { error: 'המשחק כבר התחיל' };
+  }
+
+  // Validate password if room has one
+  if (room.password) {
+    if (!password || password.trim() !== room.password) {
+      return { error: 'סיסמה שגויה' };
+    }
   }
 
   // Find empty seat
@@ -106,6 +128,26 @@ export function joinRoom(roomCode: string, socketId: string, playerName: string,
   return { room, seat: emptySeat };
 }
 
+export function listRooms(): RoomSummary[] {
+  const summaries: RoomSummary[] = [];
+  for (const [code, room] of rooms) {
+    if (room.state.phase !== GamePhase.WAITING) continue;
+
+    const playerCount = SEAT_ORDER.filter(s => room.state.players[s] !== null).length;
+    if (playerCount >= 4) continue; // Don't show full rooms
+
+    summaries.push({
+      code,
+      creatorName: room.creatorName,
+      playerCount,
+      maxPlayers: 4,
+      targetScore: room.state.targetScore,
+      hasPassword: !!room.password,
+    });
+  }
+  return summaries.sort((a, b) => b.playerCount - a.playerCount); // Show fuller rooms first
+}
+
 export function getRoom(socketId: string): Room | null {
   const code = socketToRoom.get(socketId);
   if (!code) return null;
@@ -119,28 +161,28 @@ export function getRoomByCode(code: string): Room | null {
 export function removePlayer(socketId: string): { room: Room; seat: SeatPosition } | null {
   const code = socketToRoom.get(socketId);
   if (!code) return null;
-  
+
   const room = rooms.get(code);
   if (!room) return null;
-  
+
   const seat = room.socketToSeat.get(socketId);
   if (!seat) return null;
-  
+
   const player = room.state.players[seat];
   if (player) {
     player.connected = false;
   }
-  
+
   room.socketToSeat.delete(socketId);
   socketToRoom.delete(socketId);
-  
+
   // Check if room is empty
   const connectedPlayers = SEAT_ORDER.filter(s => room.state.players[s]?.connected);
   if (connectedPlayers.length === 0) {
     rooms.delete(code);
     return null;
   }
-  
+
   return { room, seat };
 }
 
@@ -159,26 +201,44 @@ export function swapSeat(socketId: string, targetSeat: SeatPosition): { room: Ro
   if (room.state.phase !== GamePhase.WAITING) return null;
 
   const currentSeat = room.socketToSeat.get(socketId);
-  if (!currentSeat) return null;
+  if (!currentSeat || currentSeat === targetSeat) return null;
 
-  // Check if target seat is empty
-  if (room.state.players[targetSeat]) return null;
+  const currentPlayer = room.state.players[currentSeat];
+  if (!currentPlayer) return null;
 
-  // Move player to new seat
-  const player = room.state.players[currentSeat];
-  if (!player) return null;
+  const targetPlayer = room.state.players[targetSeat];
 
-  // Update player seat
-  player.seat = targetSeat;
+  if (targetPlayer) {
+    // Mutual swap: exchange both players
+    const targetSocketId = room.seatToSocket.get(targetSeat);
 
-  // Update mappings
-  room.socketToSeat.set(socketId, targetSeat);
-  room.seatToSocket.delete(currentSeat);
-  room.seatToSocket.set(targetSeat, socketId);
+    // Swap player objects
+    room.state.players[currentSeat] = targetPlayer;
+    room.state.players[targetSeat] = currentPlayer;
 
-  // Update game state
-  room.state.players[currentSeat] = null;
-  room.state.players[targetSeat] = player;
+    // Update seat fields
+    currentPlayer.seat = targetSeat;
+    targetPlayer.seat = currentSeat;
+
+    // Update socket mappings
+    room.socketToSeat.set(socketId, targetSeat);
+    room.seatToSocket.set(targetSeat, socketId);
+
+    if (targetSocketId) {
+      room.socketToSeat.set(targetSocketId, currentSeat);
+      room.seatToSocket.set(currentSeat, targetSocketId);
+    }
+  } else {
+    // Move to empty seat
+    currentPlayer.seat = targetSeat;
+
+    room.socketToSeat.set(socketId, targetSeat);
+    room.seatToSocket.delete(currentSeat);
+    room.seatToSocket.set(targetSeat, socketId);
+
+    room.state.players[currentSeat] = null;
+    room.state.players[targetSeat] = currentPlayer;
+  }
 
   return { room, oldSeat: currentSeat };
 }
