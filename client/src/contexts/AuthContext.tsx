@@ -1,0 +1,180 @@
+import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
+
+export interface UserProfile {
+  id: string;
+  nickname: string;
+  avatar: string;
+  elo_rating: number;
+  xp: number;
+  level: number;
+  created_at: string;
+  last_seen: string;
+  is_online: boolean;
+}
+
+interface AuthContextType {
+  user: any | null;
+  profile: UserProfile | null;
+  loading: boolean;
+  needsNickname: boolean;
+  signInWithGoogle: () => Promise<void>;
+  signOut: () => Promise<void>;
+  updateNickname: (nickname: string, avatar: string) => Promise<void>;
+  isSupabaseEnabled: boolean;
+}
+
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [user, setUser] = useState<any | null>(null);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [needsNickname, setNeedsNickname] = useState(false);
+  const isSupabaseEnabled = isSupabaseConfigured();
+
+  // Check for existing session on mount
+  useEffect(() => {
+    if (!isSupabaseEnabled) {
+      setLoading(false);
+      return;
+    }
+
+    const checkSession = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user) {
+          setUser(session.user);
+          // Fetch profile
+          const { data: profileData } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', session.user.id)
+            .single();
+
+          if (profileData) {
+            setProfile(profileData);
+            setNeedsNickname(false);
+          } else {
+            setNeedsNickname(true);
+          }
+        }
+      } catch (error) {
+        console.error('Error checking session:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    checkSession();
+  }, [isSupabaseEnabled]);
+
+  // Listen for auth state changes
+  useEffect(() => {
+    if (!isSupabaseEnabled) return;
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (session?.user) {
+        setUser(session.user);
+        // Fetch profile
+        const { data: profileData } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', session.user.id)
+          .single();
+
+        if (profileData) {
+          setProfile(profileData);
+          setNeedsNickname(false);
+        } else {
+          setNeedsNickname(true);
+        }
+      } else {
+        setUser(null);
+        setProfile(null);
+        setNeedsNickname(false);
+      }
+      setLoading(false);
+    });
+
+    return () => {
+      subscription?.unsubscribe();
+    };
+  }, [isSupabaseEnabled]);
+
+  const signInWithGoogle = useCallback(async () => {
+    if (!isSupabaseEnabled) throw new Error('Supabase not configured');
+
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: window.location.origin,
+      },
+    });
+
+    if (error) throw error;
+  }, [isSupabaseEnabled]);
+
+  const signOut = useCallback(async () => {
+    if (!isSupabaseEnabled) throw new Error('Supabase not configured');
+
+    const { error } = await supabase.auth.signOut();
+    if (error) throw error;
+
+    setUser(null);
+    setProfile(null);
+    setNeedsNickname(false);
+  }, [isSupabaseEnabled]);
+
+  const updateNickname = useCallback(async (nickname: string, avatar: string) => {
+    if (!isSupabaseEnabled || !user) throw new Error('Supabase not configured or user not logged in');
+
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .insert({
+          id: user.id,
+          nickname,
+          avatar,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      setProfile(data);
+      setNeedsNickname(false);
+    } catch (error: any) {
+      if (error.code === '23505') {
+        // Unique constraint violation
+        throw new Error('שם זה כבר תפוס');
+      }
+      throw error;
+    }
+  }, [user, isSupabaseEnabled]);
+
+  return (
+    <AuthContext.Provider
+      value={{
+        user,
+        profile,
+        loading,
+        needsNickname,
+        signInWithGoogle,
+        signOut,
+        updateNickname,
+        isSupabaseEnabled,
+      }}
+    >
+      {children}
+    </AuthContext.Provider>
+  );
+};
+
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error('useAuth must be used within AuthProvider');
+  }
+  return context;
+};

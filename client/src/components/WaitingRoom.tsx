@@ -45,8 +45,8 @@ export const WaitingRoom: React.FC<WaitingRoomProps> = ({
     if (navigator.share) {
       try {
         await navigator.share({
-          title: 'טרוקו - הצטרף למשחק!',
-          text: `הצטרף למשחק טרוקו! קוד חדר: ${roomCode}`,
+          title: 'אטו - הצטרף למשחק!',
+          text: `הצטרף למשחק אטו! קוד חדר: ${roomCode}`,
           url,
         });
         return;
@@ -156,7 +156,7 @@ export const WaitingRoom: React.FC<WaitingRoomProps> = ({
             ← עזוב
           </button>
           <div className="text-center">
-            <h1 className="text-2xl font-bold text-yellow-400">טרוקו</h1>
+            <h1 className="text-2xl font-bold text-yellow-400">אטו</h1>
             <p className="text-gray-400 text-xs">חדר המתנה</p>
           </div>
           <div className="w-16" /> {/* Spacer for centering */}

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { ClientGameState, Suit, SeatPosition } from '../types';
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
 
 interface RoomInfo {
   roomCode: string;
@@ -18,36 +19,55 @@ export function useSocket() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const socket = io(window.location.origin, {
-      transports: ['websocket', 'polling'],
-    });
-    socketRef.current = socket;
+    const setupSocket = async () => {
+      let token: string | null = null;
 
-    socket.on('connect', () => {
-      setConnected(true);
-      setReconnecting(false);
-      // Auto-rejoin room after reconnection (e.g. iPhone background/lock)
-      const info = roomInfoRef.current;
-      if (info) {
-        console.log(`[socket] reconnected, rejoining room ${info.roomCode} as ${info.playerName}`);
-        socket.emit('rejoinRoom', { roomCode: info.roomCode, playerName: info.playerName });
+      // Get auth token if Supabase is configured
+      if (isSupabaseConfigured()) {
+        try {
+          const { data: { session } } = await supabase.auth.getSession();
+          token = session?.access_token || null;
+        } catch (error) {
+          console.error('Error getting auth token:', error);
+        }
       }
-    });
-    socket.on('disconnect', () => {
-      setConnected(false);
-      setReconnecting(true);
-    });
-    socket.on('gameState', (state: ClientGameState) => setGameState(state));
-    socket.on('roomJoined', (data: RoomInfo) => {
-      setRoomInfo(data);
-      roomInfoRef.current = data;
-      setError(null);
-    });
-    socket.on('roomError', (msg: string) => setError(msg));
 
-    return () => {
-      socket.disconnect();
+      const socket = io(window.location.origin, {
+        transports: ['websocket', 'polling'],
+        auth: {
+          token,
+        },
+      });
+      socketRef.current = socket;
+
+      socket.on('connect', () => {
+        setConnected(true);
+        setReconnecting(false);
+        // Auto-rejoin room after reconnection (e.g. iPhone background/lock)
+        const info = roomInfoRef.current;
+        if (info) {
+          console.log(`[socket] reconnected, rejoining room ${info.roomCode} as ${info.playerName}`);
+          socket.emit('rejoinRoom', { roomCode: info.roomCode, playerName: info.playerName });
+        }
+      });
+      socket.on('disconnect', () => {
+        setConnected(false);
+        setReconnecting(true);
+      });
+      socket.on('gameState', (state: ClientGameState) => setGameState(state));
+      socket.on('roomJoined', (data: RoomInfo) => {
+        setRoomInfo(data);
+        roomInfoRef.current = data;
+        setError(null);
+      });
+      socket.on('roomError', (msg: string) => setError(msg));
+
+      return () => {
+        socket.disconnect();
+      };
     };
+
+    setupSocket();
   }, []);
 
   const createRoom = useCallback((name: string, targetScore?: number, avatar?: string) => {

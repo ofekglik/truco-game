@@ -11,6 +11,7 @@ import {
   startRound, placeBid, declareTrump, singCante, doneSinging, playCard, nextRound, getClientState
 } from './engine/game.js';
 import { GamePhase, SEAT_ORDER, SeatPosition, Suit } from './engine/types.js';
+import { supabase, isSupabaseConfigured } from './lib/supabase.js';
 
 const app = express();
 app.use(cors());
@@ -31,6 +32,42 @@ const io = new Server(httpServer, {
     methods: ['GET', 'POST'],
   },
   transports: ['websocket', 'polling'],
+});
+
+// Socket.IO auth middleware
+io.use(async (socket, next) => {
+  const token = socket.handshake.auth.token;
+
+  if (!isSupabaseConfigured()) {
+    // Supabase not configured - allow anonymous connections
+    socket.data.userId = null;
+    socket.data.isAuthenticated = false;
+    return next();
+  }
+
+  if (!token) {
+    // No token provided - allow anonymous connections for backward compatibility
+    socket.data.userId = null;
+    socket.data.isAuthenticated = false;
+    return next();
+  }
+
+  try {
+    const { data: { user }, error } = await supabase.auth.getUser(token);
+    if (error || !user) {
+      socket.data.userId = null;
+      socket.data.isAuthenticated = false;
+      return next();
+    }
+    socket.data.userId = user.id;
+    socket.data.isAuthenticated = true;
+    next();
+  } catch (err) {
+    console.error('Auth middleware error:', err);
+    socket.data.userId = null;
+    socket.data.isAuthenticated = false;
+    next();
+  }
 });
 
 // Turn timer system: Map<roomCode, Map<seat, timeoutId>>

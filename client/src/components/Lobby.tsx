@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useAuth } from '../contexts/AuthContext';
 
 interface LobbyProps {
   onCreateRoom: (name: string, targetScore?: number, avatar?: string) => void;
@@ -6,15 +7,17 @@ interface LobbyProps {
   error: string | null;
   connected: boolean;
   prefillRoomCode?: string;
+  onShowProfile: () => void;
 }
 
 const AVATARS = ['🦁', '🐺', '🦊', '🐸', '🦉', '🐯', '🦅', '🐻', '🎭', '👑', '🎪', '🎯'];
 
-export const Lobby: React.FC<LobbyProps> = ({ onCreateRoom, onJoinRoom, error, connected, prefillRoomCode }) => {
-  const [name, setName] = useState('');
+export const Lobby: React.FC<LobbyProps> = ({
+  onCreateRoom, onJoinRoom, error, connected, prefillRoomCode, onShowProfile
+}) => {
+  const { profile } = useAuth();
   const [roomCode, setRoomCode] = useState(prefillRoomCode || '');
   const [targetScore, setTargetScore] = useState(1000);
-  const [selectedAvatar, setSelectedAvatar] = useState(AVATARS[0]);
   const [mode, setMode] = useState<'menu' | 'create' | 'join'>(prefillRoomCode ? 'join' : 'menu');
 
   // If prefillRoomCode arrives after mount
@@ -25,19 +28,27 @@ export const Lobby: React.FC<LobbyProps> = ({ onCreateRoom, onJoinRoom, error, c
     }
   }, [prefillRoomCode]);
 
+  if (!profile) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#0d1117]">
+        <p className="text-gray-400">טוען פרופיל...</p>
+      </div>
+    );
+  }
+
   const handleCreate = () => {
-    if (name.trim()) onCreateRoom(name.trim(), targetScore, selectedAvatar);
+    onCreateRoom(profile.nickname, targetScore, profile.avatar);
   };
 
   const handleJoin = () => {
-    if (name.trim() && roomCode.trim()) onJoinRoom(roomCode.trim().toUpperCase(), name.trim(), selectedAvatar);
+    if (roomCode.trim()) {
+      onJoinRoom(roomCode.trim().toUpperCase(), profile.nickname, profile.avatar);
+    }
   };
 
   const resetForm = () => {
-    setName('');
     setRoomCode('');
     setTargetScore(1000);
-    setSelectedAvatar(AVATARS[0]);
   };
 
   const goToMenu = () => {
@@ -59,6 +70,16 @@ export const Lobby: React.FC<LobbyProps> = ({ onCreateRoom, onJoinRoom, error, c
         <div className="absolute top-1/2 right-1/4 text-7xl">♠</div>
       </div>
 
+      {/* Profile Button - Top Right */}
+      <button
+        onClick={onShowProfile}
+        className="absolute top-4 left-4 flex items-center gap-2 px-4 py-2 bg-yellow-500/20 hover:bg-yellow-500/40 border border-yellow-500/50 rounded-lg transition-all duration-300"
+        title="הצג פרופיל"
+      >
+        <span className="text-xl">{profile.avatar}</span>
+        <span className="text-yellow-300 font-semibold text-sm hidden sm:inline">{profile.nickname}</span>
+      </button>
+
       {/* Main container with glass morphism effect */}
       <div className="relative w-full max-w-md">
         {/* Animated background glow */}
@@ -73,7 +94,7 @@ export const Lobby: React.FC<LobbyProps> = ({ onCreateRoom, onJoinRoom, error, c
               className="text-5xl md:text-6xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 via-yellow-500 to-yellow-400 mb-2"
               style={{ fontFamily: 'Heebo, sans-serif' }}
             >
-              טרוקו
+              אטו
             </h1>
             <p className="text-yellow-400/80 text-sm md:text-base font-medium">משחק קלפים ספרדי קלאסי</p>
 
@@ -122,38 +143,13 @@ export const Lobby: React.FC<LobbyProps> = ({ onCreateRoom, onJoinRoom, error, c
           {/* Create Room Mode */}
           {mode === 'create' && (
             <div className="space-y-5 animate-in fade-in duration-300">
-              {/* Avatar Selection */}
-              <div className="space-y-2">
-                <label className="block text-yellow-300 text-sm font-semibold">😊 בחר אווטאר</label>
-                <div className="grid grid-cols-6 gap-2">
-                  {AVATARS.map(avatar => (
-                    <button
-                      key={avatar}
-                      onClick={() => setSelectedAvatar(avatar)}
-                      className={`aspect-square rounded-xl text-2xl transition-all duration-200 flex items-center justify-center ${
-                        selectedAvatar === avatar
-                          ? 'ring-4 ring-yellow-400 bg-yellow-500/20 scale-110'
-                          : 'bg-[#0a0a0f] hover:bg-yellow-500/10'
-                      }`}
-                    >
-                      {avatar}
-                    </button>
-                  ))}
+              {/* Player Info Display */}
+              <div className="p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-xl text-center">
+                <p className="text-gray-400 text-sm mb-2">שחקן:</p>
+                <div className="flex items-center justify-center gap-2">
+                  <span className="text-3xl">{profile.avatar}</span>
+                  <p className="text-yellow-300 font-bold text-lg">{profile.nickname}</p>
                 </div>
-              </div>
-
-              {/* Player Name Input */}
-              <div className="space-y-2">
-                <label className="block text-yellow-300 text-sm font-semibold">👤 שם השחקן</label>
-                <input
-                  type="text"
-                  value={name}
-                  onChange={e => setName(e.target.value)}
-                  placeholder="הכנס את שמך..."
-                  className="w-full p-4 rounded-xl bg-[#0a0a0f] border-2 border-yellow-500/30 hover:border-yellow-500/60 focus:border-yellow-400 focus:outline-none text-white placeholder-gray-500 text-right transition-colors duration-300"
-                  maxLength={20}
-                  autoFocus
-                />
               </div>
 
               {/* Target Score Slider */}
@@ -183,8 +179,7 @@ export const Lobby: React.FC<LobbyProps> = ({ onCreateRoom, onJoinRoom, error, c
               {/* Create Button */}
               <button
                 onClick={handleCreate}
-                disabled={!name.trim()}
-                className="w-full py-4 px-6 bg-gradient-to-r from-yellow-500 to-yellow-400 hover:from-yellow-400 hover:to-yellow-300 disabled:from-gray-700 disabled:to-gray-600 disabled:text-gray-500 text-gray-900 font-bold rounded-2xl text-lg transition-all duration-300 transform hover:scale-105 active:scale-95 shadow-lg hover:shadow-yellow-500/50 disabled:shadow-none disabled:cursor-not-allowed"
+                className="w-full py-4 px-6 bg-gradient-to-r from-yellow-500 to-yellow-400 hover:from-yellow-400 hover:to-yellow-300 text-gray-900 font-bold rounded-2xl text-lg transition-all duration-300 transform hover:scale-105 active:scale-95 shadow-lg hover:shadow-yellow-500/50"
               >
                 ✨ צור חדר
               </button>
@@ -202,38 +197,13 @@ export const Lobby: React.FC<LobbyProps> = ({ onCreateRoom, onJoinRoom, error, c
           {/* Join Room Mode */}
           {mode === 'join' && (
             <div className="space-y-5 animate-in fade-in duration-300">
-              {/* Avatar Selection */}
-              <div className="space-y-2">
-                <label className="block text-yellow-300 text-sm font-semibold">😊 בחר אווטאר</label>
-                <div className="grid grid-cols-6 gap-2">
-                  {AVATARS.map(avatar => (
-                    <button
-                      key={avatar}
-                      onClick={() => setSelectedAvatar(avatar)}
-                      className={`aspect-square rounded-xl text-2xl transition-all duration-200 flex items-center justify-center ${
-                        selectedAvatar === avatar
-                          ? 'ring-4 ring-yellow-400 bg-yellow-500/20 scale-110'
-                          : 'bg-[#0a0a0f] hover:bg-yellow-500/10'
-                      }`}
-                    >
-                      {avatar}
-                    </button>
-                  ))}
+              {/* Player Info Display */}
+              <div className="p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-xl text-center">
+                <p className="text-gray-400 text-sm mb-2">שחקן:</p>
+                <div className="flex items-center justify-center gap-2">
+                  <span className="text-3xl">{profile.avatar}</span>
+                  <p className="text-yellow-300 font-bold text-lg">{profile.nickname}</p>
                 </div>
-              </div>
-
-              {/* Player Name Input */}
-              <div className="space-y-2">
-                <label className="block text-yellow-300 text-sm font-semibold">👤 שם השחקן</label>
-                <input
-                  type="text"
-                  value={name}
-                  onChange={e => setName(e.target.value)}
-                  placeholder="הכנס את שמך..."
-                  className="w-full p-4 rounded-xl bg-[#0a0a0f] border-2 border-yellow-500/30 hover:border-yellow-500/60 focus:border-yellow-400 focus:outline-none text-white placeholder-gray-500 text-right transition-colors duration-300"
-                  maxLength={20}
-                  autoFocus
-                />
               </div>
 
               {/* Room Code Input */}
@@ -254,7 +224,7 @@ export const Lobby: React.FC<LobbyProps> = ({ onCreateRoom, onJoinRoom, error, c
               {/* Join Button */}
               <button
                 onClick={handleJoin}
-                disabled={!name.trim() || !roomCode.trim() || roomCode.length < 4}
+                disabled={!roomCode.trim() || roomCode.length < 4}
                 className="w-full py-4 px-6 bg-gradient-to-r from-yellow-500 to-yellow-400 hover:from-yellow-400 hover:to-yellow-300 disabled:from-gray-700 disabled:to-gray-600 disabled:text-gray-500 text-gray-900 font-bold rounded-2xl text-lg transition-all duration-300 transform hover:scale-105 active:scale-95 shadow-lg hover:shadow-yellow-500/50 disabled:shadow-none disabled:cursor-not-allowed"
               >
                 🔑 הצטרף לחדר
@@ -272,7 +242,7 @@ export const Lobby: React.FC<LobbyProps> = ({ onCreateRoom, onJoinRoom, error, c
 
           {/* Footer */}
           <div className="mt-8 pt-6 border-t border-yellow-500/20 text-center">
-            <p className="text-gray-400 text-xs">טרוקו • משחק קלפים קלאסי</p>
+            <p className="text-gray-400 text-xs">אטו • משחק קלפים קלאסי</p>
           </div>
         </div>
       </div>

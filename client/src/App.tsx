@@ -1,11 +1,16 @@
 import React, { useEffect, useState } from 'react';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { useSocket } from './hooks/useSocket';
 import { Lobby } from './components/Lobby';
 import { WaitingRoom } from './components/WaitingRoom';
 import { GameTable } from './components/GameTable';
+import { LoginScreen } from './components/LoginScreen';
+import { NicknameScreen } from './components/NicknameScreen';
+import { ProfilePage } from './components/ProfilePage';
 import { GamePhase } from './types';
 
-function App() {
+function AppContent() {
+  const { user, profile, loading, needsNickname } = useAuth();
   const {
     connected, reconnecting, gameState, roomInfo, error,
     createRoom, joinRoom, startGame,
@@ -15,6 +20,7 @@ function App() {
 
   // Extract room code from URL params for share links
   const [urlRoomCode, setUrlRoomCode] = useState<string | null>(null);
+  const [showProfile, setShowProfile] = useState(false);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -26,6 +32,33 @@ function App() {
     }
   }, []);
 
+  // Loading auth state
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#0d1117]">
+        <div className="text-center">
+          <div className="text-4xl mb-4 animate-spin">🃏</div>
+          <p className="text-gray-400">טוען...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Not authenticated - show login screen
+  if (!user) {
+    return <LoginScreen />;
+  }
+
+  // Authenticated but no profile - show nickname screen
+  if (needsNickname) {
+    return <NicknameScreen />;
+  }
+
+  // Show profile page if requested
+  if (showProfile) {
+    return <ProfilePage onBack={() => setShowProfile(false)} />;
+  }
+
   // Not in a room yet
   if (!roomInfo) {
     return (
@@ -35,6 +68,7 @@ function App() {
         error={error}
         connected={connected}
         prefillRoomCode={urlRoomCode || undefined}
+        onShowProfile={() => setShowProfile(true)}
       />
     );
   }
@@ -82,6 +116,14 @@ function App() {
         <p className="text-gray-400">טוען...</p>
       </div>
     </div>
+  );
+}
+
+function App() {
+  return (
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
   );
 }
 
