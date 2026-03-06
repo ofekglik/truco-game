@@ -9,6 +9,7 @@ interface CardProps {
   small?: boolean;
   useCustomImages?: boolean;
   imageSrc?: string;
+  isBiddingPhase?: boolean;
 }
 
 const SUIT_PIPS: Record<Suit, string> = {
@@ -18,7 +19,7 @@ const SUIT_PIPS: Record<Suit, string> = {
   [Suit.BASTOS]: '♣',
 };
 
-export const CardComponent: React.FC<CardProps> = ({ card, playable, selected, onClick, small, useCustomImages, imageSrc }) => {
+export const CardComponent: React.FC<CardProps> = ({ card, playable, selected, onClick, small, useCustomImages, imageSrc, isBiddingPhase }) => {
   const [imageError, setImageError] = React.useState(false);
 
   // If custom image is available and loads successfully, render as image
@@ -32,7 +33,7 @@ export const CardComponent: React.FC<CardProps> = ({ card, playable, selected, o
           ${small ? 'w-14 h-20' : 'w-20 h-28'}
           ${playable ? 'cursor-pointer hover:-translate-y-3 hover:shadow-xl border-yellow-400' : 'border-gray-300'}
           ${selected ? '-translate-y-4 ring-2 ring-yellow-400' : ''}
-          ${!playable && !small ? 'opacity-70' : ''}
+          ${!playable && !small && !isBiddingPhase ? 'opacity-90' : ''}
         `}
       >
         <img
@@ -64,7 +65,7 @@ export const CardComponent: React.FC<CardProps> = ({ card, playable, selected, o
         ${small ? 'w-14 h-20 text-xs' : 'w-20 h-28 text-sm'}
         ${playable ? 'cursor-pointer hover:-translate-y-3 hover:shadow-xl border-yellow-400' : 'border-gray-300'}
         ${selected ? '-translate-y-4 ring-2 ring-yellow-400' : ''}
-        ${!playable && !small ? 'opacity-70' : ''}
+        ${!playable && !small && !isBiddingPhase ? 'opacity-90' : ''}
       `}
       style={{ fontFamily: 'serif' }}
     >

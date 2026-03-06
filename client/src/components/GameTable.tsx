@@ -79,6 +79,7 @@ export const GameTable: React.FC<GameTableProps> = ({
   const [trickToast, setTrickToast] = useState<{ winner: string; team1: number; team2: number } | null>(null);
   const [lastCompletedTricksLength, setLastCompletedTricksLength] = useState(0);
   const [windowWidth, setWindowWidth] = useState(window.innerWidth);
+  const [showScorePill, setShowScorePill] = useState(false);
 
   const dragStateRef = useRef<{
     isDragging: boolean;
@@ -280,60 +281,97 @@ export const GameTable: React.FC<GameTableProps> = ({
 
     const isCurrentTurn = gameState.currentTurnSeat === seat;
     const team = SEAT_TEAM[seat];
-    const teamColor = team === 'team1' ? 'border-blue-500' : 'border-red-500';
+    const teamColor = team === 'team1' ? '#3B82F6' : '#DC2626';
+    const teamBg = team === 'team1' ? 'from-blue-900/50 to-blue-800/50' : 'from-red-900/50 to-red-800/50';
 
     const posClasses = {
-      left: 'absolute left-4 top-1/2 -translate-y-1/2 flex flex-col items-center',
-      top: 'absolute top-4 left-1/2 -translate-x-1/2 flex flex-col items-center',
-      right: 'absolute right-4 top-1/2 -translate-y-1/2 flex flex-col items-center',
+      left: 'absolute left-2 top-1/2 -translate-y-1/2',
+      top: 'absolute top-2 left-1/2 -translate-x-1/2',
+      right: 'absolute right-2 top-1/2 -translate-y-1/2',
     };
 
     return (
-      <div key={seat} className={posClasses[pos]}>
-        <div className={`relative px-3 py-1.5 rounded-lg text-sm font-medium mb-2 border-2 ${
-          isCurrentTurn ? 'bg-yellow-600/30 border-yellow-500 text-yellow-300' : `bg-[#1a2a4e]/80 ${teamColor} text-gray-300`
+      <div key={seat} className={`${posClasses[pos]} z-20`}>
+        {/* Poker HUD Badge */}
+        <div className={`relative rounded-xl px-4 py-3 backdrop-blur-sm border-2 transition-all ${
+          isCurrentTurn
+            ? 'bg-yellow-500/30 border-yellow-400 shadow-lg shadow-yellow-400/50'
+            : `bg-gradient-to-br ${teamBg} border-gray-600`
         } ${!player.connected ? 'opacity-50' : ''}`}>
-          {player.avatar && <span className="mr-1">{player.avatar}</span>}
-          {player.name}
-          {!player.connected && ' (מנותק)'}
+          {/* Team color indicator bar */}
+          <div className="absolute top-0 left-0 right-0 h-1 rounded-t-[9px]" style={{ backgroundColor: teamColor }} />
+
+          {/* Player info */}
+          <div className="flex items-center gap-2 min-w-max">
+            {player.avatar && (
+              <span className="text-2xl">{player.avatar}</span>
+            )}
+            <div className="flex flex-col">
+              <div className="text-sm font-bold text-white leading-tight">
+                {player.name}
+                {!player.connected && <span className="text-xs text-red-400 ml-1">(מנותק)</span>}
+              </div>
+              {/* Card count indicator */}
+              <div className="flex gap-1 mt-1">
+                {Array.from({ length: Math.min(10, player.cardCount) }, (_, i) => (
+                  <div
+                    key={i}
+                    className="w-1.5 h-1.5 rounded-full"
+                    style={{ backgroundColor: teamColor }}
+                  />
+                ))}
+                {player.cardCount > 10 && (
+                  <span className="text-xs text-gray-300 ml-1">+{player.cardCount - 10}</span>
+                )}
+              </div>
+            </div>
+          </div>
           {isCurrentTurn && renderTurnTimer()}
-        </div>
-        <div className={`flex ${pos === 'left' || pos === 'right' ? 'flex-col -space-y-8' : 'flex-row -space-x-6'}`}>
-          {Array.from({ length: player.cardCount }, (_, i) => (
-            <CardBack
-              key={i}
-              small
-              backImageSrc={useCustomImages ? '/cards/back.png' : undefined}
-            />
-          ))}
         </div>
       </div>
     );
   };
 
   const renderTrickCards = () => {
-    const positions: Record<string, string> = {
-      bottom: 'bottom-1/3 left-1/2 -translate-x-1/2',
-      left: 'top-1/2 left-1/3 -translate-y-1/2',
-      top: 'top-1/3 left-1/2 -translate-x-1/2',
-      right: 'top-1/2 right-1/3 -translate-y-1/2',
-    };
+    const cards = gameState.currentTrick.cards;
+    const cardCount = cards.length;
 
-    return gameState.currentTrick.cards.map((tc, i) => {
-      const pos = getRelativePosition(gameState.mySeat, tc.seat);
+    return cards.map((tc, i) => {
       const cardImageSrc = useCustomImages ? `/cards/${tc.card.suit}/${tc.card.rank}.png` : undefined;
+
+      // Center fan layout: cards are offset and rotated around a central point
+      const angleStep = cardCount > 1 ? 360 / cardCount : 0;
+      const angle = i * angleStep;
+      const radius = 60; // distance from center
+      const rotation = angle - 90; // rotate around the pile
+
+      const x = Math.cos((angle * Math.PI) / 180) * radius;
+      const y = Math.sin((angle * Math.PI) / 180) * radius;
+      const cardRotation = ((i - Math.floor(cardCount / 2)) * 8) % 360; // subtle rotation per card
+
       return (
         <div
           key={i}
-          className={`absolute ${positions[pos]} z-10 animate-slideIn`}
-          style={{ animationDelay: `${i * 100}ms` }}
+          className="absolute z-10 animate-slideIn"
+          style={{
+            left: '50%',
+            top: '50%',
+            transform: `translate(calc(-50% + ${x}px), calc(-50% + ${y}px)) rotate(${cardRotation}deg)`,
+            animationDelay: `${i * 100}ms`,
+          }}
         >
-          <CardComponent
-            card={tc.card}
-            small
-            useCustomImages={useCustomImages}
-            imageSrc={cardImageSrc}
-          />
+          <div className="flex flex-col items-center gap-1">
+            <CardComponent
+              card={tc.card}
+              small
+              useCustomImages={useCustomImages}
+              imageSrc={cardImageSrc}
+            />
+            {/* Player name label */}
+            <div className="text-xs font-bold text-gray-300 bg-black/50 px-2 py-0.5 rounded whitespace-nowrap">
+              {gameState.players[tc.seat]?.name || tc.seat}
+            </div>
+          </div>
         </div>
       );
     });
@@ -343,42 +381,55 @@ export const GameTable: React.FC<GameTableProps> = ({
     if (gameState.phase !== GamePhase.BIDDING || !isMyTurn) return null;
 
     return (
-      <div className="absolute bottom-44 left-1/2 -translate-x-1/2 z-30 bg-[#16213e]/95 border border-[#4a5a7e] rounded-xl p-4 shadow-xl backdrop-blur-sm">
-        <p className="text-center text-yellow-400 font-bold mb-3">הצעה שלך</p>
-        <div className="flex items-center gap-3 mb-3" dir="ltr">
-          <button onClick={() => setBidAmount(Math.max(validActions.minBid, bidAmount - 10))}
-            className="w-10 h-10 rounded-lg bg-[#2a3a5e] hover:bg-[#3a4a6e] text-white text-xl font-bold">−</button>
-          <input
-            type="number"
-            value={bidAmount}
-            onChange={e => {
-              const raw = Number(e.target.value);
-              const rounded = Math.round(raw / 10) * 10;
-              setBidAmount(Math.max(validActions.minBid, Math.min(220, rounded)));
-            }}
-            className="w-20 h-10 text-center text-2xl font-bold bg-[#0a0a1a] text-yellow-400 rounded-lg border border-[#4a5a7e]"
-            min={validActions.minBid}
-            max={220}
-            step={10}
-          />
-          <button onClick={() => setBidAmount(Math.min(220, bidAmount + 10))}
-            className="w-10 h-10 rounded-lg bg-[#2a3a5e] hover:bg-[#3a4a6e] text-white text-xl font-bold">+</button>
+      <>
+        {/* Semi-transparent backdrop */}
+        <div className="absolute inset-0 z-29 bg-black/50 backdrop-blur-sm animate-fadeIn" />
+
+        {/* Bottom sheet modal */}
+        <div className="absolute bottom-0 left-0 right-0 z-30 animate-slideUpBottom">
+          {/* Drag handle */}
+          <div className="flex justify-center pt-3 pb-2">
+            <div className="w-12 h-1 bg-gray-500 rounded-full" />
+          </div>
+
+          <div className="bg-[#16213e] rounded-t-3xl p-6 shadow-2xl">
+            <p className="text-center text-yellow-400 font-bold mb-6 text-lg">הצעה שלך</p>
+            <div className="flex items-center gap-3 mb-6" dir="ltr">
+              <button onClick={() => setBidAmount(Math.max(validActions.minBid, bidAmount - 10))}
+                className="w-12 h-12 rounded-lg bg-[#2a3a5e] hover:bg-[#3a4a6e] text-white text-2xl font-bold transition-colors">−</button>
+              <input
+                type="number"
+                value={bidAmount}
+                onChange={e => {
+                  const raw = Number(e.target.value);
+                  const rounded = Math.round(raw / 10) * 10;
+                  setBidAmount(Math.max(validActions.minBid, Math.min(220, rounded)));
+                }}
+                className="w-24 h-12 text-center text-3xl font-bold bg-[#0a0a1a] text-yellow-400 rounded-lg border-2 border-[#4a5a7e]"
+                min={validActions.minBid}
+                max={220}
+                step={10}
+              />
+              <button onClick={() => setBidAmount(Math.min(220, bidAmount + 10))}
+                className="w-12 h-12 rounded-lg bg-[#2a3a5e] hover:bg-[#3a4a6e] text-white text-2xl font-bold transition-colors">+</button>
+            </div>
+            <div className="flex gap-2">
+              <button onClick={() => { onPlaceBid(bidAmount); setBidAmount(Math.max(70, bidAmount + 10)); }}
+                className="flex-1 py-3 bg-yellow-600 hover:bg-yellow-500 text-black font-bold rounded-xl transition-colors">
+                קנה ({bidAmount})
+              </button>
+              <button onClick={() => onPlaceBid(230)}
+                className="py-3 px-4 bg-red-700 hover:bg-red-600 text-white font-bold rounded-xl transition-colors">
+                קאפו!
+              </button>
+              <button onClick={onPassBid}
+                className="flex-1 py-3 bg-gray-700 hover:bg-gray-600 text-white font-bold rounded-xl transition-colors">
+                עבור
+              </button>
+            </div>
+          </div>
         </div>
-        <div className="flex gap-2">
-          <button onClick={() => { onPlaceBid(bidAmount); setBidAmount(Math.max(70, bidAmount + 10)); }}
-            className="flex-1 py-2 bg-yellow-600 hover:bg-yellow-500 text-black font-bold rounded-lg">
-            קנה ({bidAmount})
-          </button>
-          <button onClick={() => onPlaceBid(230)}
-            className="py-2 px-3 bg-red-700 hover:bg-red-600 text-white font-bold rounded-lg text-sm">
-            קאפו!
-          </button>
-          <button onClick={onPassBid}
-            className="flex-1 py-2 bg-gray-700 hover:bg-gray-600 text-white font-bold rounded-lg">
-            עבור
-          </button>
-        </div>
-      </div>
+      </>
     );
   };
 
@@ -386,26 +437,38 @@ export const GameTable: React.FC<GameTableProps> = ({
     if (gameState.phase !== GamePhase.TRUMP_DECLARATION || !validActions.canDeclareTrump) return null;
 
     return (
-      <div className="absolute bottom-44 left-1/2 -translate-x-1/2 z-30 bg-[#16213e]/95 border border-[#4a5a7e] rounded-xl p-4 shadow-xl backdrop-blur-sm">
-        <p className="text-center text-yellow-400 font-bold mb-3">בחר אטו (חליפה שולטת)</p>
-        <div className="grid grid-cols-2 gap-2">
-          {Object.values(Suit).map(suit => (
-            <button
-              key={suit}
-              onClick={() => onDeclareTrump(suit)}
-              className="py-3 px-4 rounded-lg font-bold text-lg transition-colors hover:scale-105"
-              style={{
-                backgroundColor: SUIT_COLORS[suit] + '33',
-                borderColor: SUIT_COLORS[suit],
-                borderWidth: '2px',
-                color: SUIT_COLORS[suit],
-              }}
-            >
-              {SUIT_SYMBOLS[suit]} {SUIT_NAMES_HE[suit]}
-            </button>
-          ))}
+      <>
+        {/* Semi-transparent backdrop */}
+        <div className="absolute inset-0 z-29 bg-black/50 backdrop-blur-sm animate-fadeIn" />
+
+        {/* Bottom sheet modal */}
+        <div className="absolute bottom-0 left-0 right-0 z-30 animate-slideUpBottom">
+          {/* Drag handle */}
+          <div className="flex justify-center pt-3 pb-2">
+            <div className="w-12 h-1 bg-gray-500 rounded-full" />
+          </div>
+
+          <div className="bg-[#16213e] rounded-t-3xl p-6 shadow-2xl">
+            <p className="text-center text-yellow-400 font-bold mb-6 text-lg">בחר אטו (חליפה שולטת)</p>
+            <div className="grid grid-cols-2 gap-3">
+              {Object.values(Suit).map(suit => (
+                <button
+                  key={suit}
+                  onClick={() => onDeclareTrump(suit)}
+                  className="py-4 px-4 rounded-xl font-bold text-lg transition-all hover:scale-105 border-2"
+                  style={{
+                    backgroundColor: SUIT_COLORS[suit] + '33',
+                    borderColor: SUIT_COLORS[suit],
+                    color: SUIT_COLORS[suit],
+                  }}
+                >
+                  {SUIT_SYMBOLS[suit]} {SUIT_NAMES_HE[suit]}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
-      </div>
+      </>
     );
   };
 
@@ -414,35 +477,47 @@ export const GameTable: React.FC<GameTableProps> = ({
     if (gameState.phase !== GamePhase.SINGING || !isBiddingTeam) return null;
 
     return (
-      <div className="absolute bottom-44 left-1/2 -translate-x-1/2 z-30 bg-[#16213e]/95 border border-[#4a5a7e] rounded-xl p-4 shadow-xl backdrop-blur-sm">
-        <p className="text-center text-yellow-400 font-bold mb-3">שירה</p>
-        {validActions.singableCantes.length > 0 && (
-          <div className="space-y-2 mb-3">
-            {validActions.singableCantes.map(suit => (
-              <button
-                key={suit}
-                onClick={() => onSingCante(suit)}
-                className="w-full py-2 px-4 rounded-lg font-bold transition-colors hover:scale-105"
-                style={{
-                  backgroundColor: SUIT_COLORS[suit] + '33',
-                  borderColor: SUIT_COLORS[suit],
-                  borderWidth: '2px',
-                  color: SUIT_COLORS[suit],
-                }}
-              >
-                שר {SUIT_SYMBOLS[suit]} {SUIT_NAMES_HE[suit]} ({suit === gameState.trumpSuit ? '40' : '20'} נק׳)
-              </button>
-            ))}
+      <>
+        {/* Semi-transparent backdrop */}
+        <div className="absolute inset-0 z-29 bg-black/50 backdrop-blur-sm animate-fadeIn" />
+
+        {/* Bottom sheet modal */}
+        <div className="absolute bottom-0 left-0 right-0 z-30 animate-slideUpBottom">
+          {/* Drag handle */}
+          <div className="flex justify-center pt-3 pb-2">
+            <div className="w-12 h-1 bg-gray-500 rounded-full" />
           </div>
-        )}
-        {validActions.singableCantes.length === 0 && (
-          <p className="text-center text-gray-400 text-sm mb-3">אין שירה אפשרית</p>
-        )}
-        <button onClick={onDoneSinging}
-          className="w-full py-2 bg-gray-700 hover:bg-gray-600 text-white font-bold rounded-lg">
-          סיים שירה
-        </button>
-      </div>
+
+          <div className="bg-[#16213e] rounded-t-3xl p-6 shadow-2xl">
+            <p className="text-center text-yellow-400 font-bold mb-6 text-lg">שירה</p>
+            {validActions.singableCantes.length > 0 && (
+              <div className="space-y-3 mb-4">
+                {validActions.singableCantes.map(suit => (
+                  <button
+                    key={suit}
+                    onClick={() => onSingCante(suit)}
+                    className="w-full py-3 px-4 rounded-xl font-bold transition-all hover:scale-105 border-2"
+                    style={{
+                      backgroundColor: SUIT_COLORS[suit] + '33',
+                      borderColor: SUIT_COLORS[suit],
+                      color: SUIT_COLORS[suit],
+                    }}
+                  >
+                    שר {SUIT_SYMBOLS[suit]} {SUIT_NAMES_HE[suit]} ({suit === gameState.trumpSuit ? '40' : '20'} נק׳)
+                  </button>
+                ))}
+              </div>
+            )}
+            {validActions.singableCantes.length === 0 && (
+              <p className="text-center text-gray-400 text-sm mb-4">אין שירה אפשרית</p>
+            )}
+            <button onClick={onDoneSinging}
+              className="w-full py-3 bg-gray-700 hover:bg-gray-600 text-white font-bold rounded-xl transition-colors">
+              סיים שירה
+            </button>
+          </div>
+        </div>
+      </>
     );
   };
 
@@ -550,6 +625,18 @@ export const GameTable: React.FC<GameTableProps> = ({
     onLeaveRoom();
   };
 
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen?.().catch(() => {
+        console.warn('Fullscreen request failed');
+      });
+    } else {
+      document.exitFullscreen?.().catch(() => {
+        console.warn('Exit fullscreen failed');
+      });
+    }
+  };
+
   // Calculate fan card layout
   const cardCount = sortedHand.length;
   const fanSpreadDegrees = 8;
@@ -595,16 +682,40 @@ export const GameTable: React.FC<GameTableProps> = ({
         .animate-goldenGlow {
           animation: goldenGlow 0.6s ease-in-out;
         }
-        @keyframes slideInFromLeft {
+        @keyframes slideInFromRight {
           from {
-            transform: translateX(-100%);
+            transform: translateX(100%);
           }
           to {
             transform: translateX(0);
           }
         }
-        .animate-slideInFromLeft {
-          animation: slideInFromLeft 0.3s ease-out;
+        .animate-slideInFromRight {
+          animation: slideInFromRight 0.3s ease-out;
+        }
+        @keyframes slideUpBottom {
+          from {
+            transform: translateY(100%);
+            opacity: 0;
+          }
+          to {
+            transform: translateY(0);
+            opacity: 1;
+          }
+        }
+        .animate-slideUpBottom {
+          animation: slideUpBottom 0.4s cubic-bezier(0.32, 0.72, 0, 1) forwards;
+        }
+        @keyframes fadeIn {
+          from {
+            opacity: 0;
+          }
+          to {
+            opacity: 1;
+          }
+        }
+        .animate-fadeIn {
+          animation: fadeIn 0.3s ease-out forwards;
         }
       `}</style>
 
@@ -613,23 +724,6 @@ export const GameTable: React.FC<GameTableProps> = ({
         isMobile ? 'inset-4' : ''
       }`}>
         <div className="absolute inset-2 rounded-[2.5rem] border border-[#2a6a3a]/30" />
-
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-center z-5">
-          {gameState.trumpSuit && (
-            <div className="bg-black/40 rounded-xl px-4 py-2 backdrop-blur-sm mb-2">
-              <span className="text-gray-400 text-xs">אטו: </span>
-              <span style={{ color: SUIT_COLORS[gameState.trumpSuit] }} className="text-lg font-bold">
-                {SUIT_SYMBOLS[gameState.trumpSuit]} {SUIT_NAMES_HE[gameState.trumpSuit]}
-              </span>
-            </div>
-          )}
-          {gameState.currentBidAmount > 0 && (
-            <div className="bg-black/40 rounded-lg px-3 py-1 backdrop-blur-sm">
-              <span className="text-gray-400 text-xs">הצעה: </span>
-              <span className="text-yellow-400 font-bold">{gameState.currentBidAmount}</span>
-            </div>
-          )}
-        </div>
 
         {renderTrickCards()}
         {renderOtherPlayer('left')}
@@ -670,12 +764,12 @@ export const GameTable: React.FC<GameTableProps> = ({
       {showMenu && (
         <>
           <div
-            className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm"
+            className="fixed inset-0 z-[45] bg-black/50 backdrop-blur-sm"
             onClick={() => setShowMenu(false)}
           />
-          <div className="absolute top-0 right-0 h-full w-64 bg-[#1a2a4e] border-l border-blue-500 shadow-lg z-45 animate-slideInFromLeft">
-            <div className="p-6 space-y-4">
-              <h3 className="text-xl font-bold text-yellow-400 mb-6">תפריט</h3>
+          <div className="fixed top-0 right-0 h-full w-64 bg-[#1a2a4e]/95 border-l border-blue-500/50 shadow-2xl z-[46] animate-slideInFromRight backdrop-blur-md">
+            <div className="p-6 space-y-3 pt-16">
+              <h3 className="text-xl font-bold text-yellow-400 mb-4">תפריט</h3>
 
               <button
                 onClick={() => setShowScoreboard(!showScoreboard)}
@@ -699,6 +793,13 @@ export const GameTable: React.FC<GameTableProps> = ({
               </button>
 
               <button
+                onClick={toggleFullscreen}
+                className="w-full py-3 px-4 bg-purple-600 hover:bg-purple-500 text-white font-bold rounded-lg transition-colors text-right"
+              >
+                📱 {document.fullscreenElement ? 'צא ממסך מלא' : 'מסך מלא'}
+              </button>
+
+              <button
                 onClick={() => setShowLeaveConfirm(true)}
                 className="w-full py-3 px-4 bg-red-600 hover:bg-red-500 text-white font-bold rounded-lg transition-colors text-right"
               >
@@ -711,7 +812,7 @@ export const GameTable: React.FC<GameTableProps> = ({
 
       {/* Leave Room Confirmation */}
       {showLeaveConfirm && (
-        <div className="absolute inset-0 z-50 bg-black/70 flex items-center justify-center backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center backdrop-blur-sm">
           <div className="bg-[#16213e] border border-[#4a5a7e] rounded-2xl p-6 w-full max-w-sm shadow-2xl">
             <h3 className="text-xl font-bold text-yellow-400 mb-4 text-center">בטוח שאתה רוצה לעזוב את המשחק?</h3>
             <div className="flex gap-3">
@@ -732,16 +833,6 @@ export const GameTable: React.FC<GameTableProps> = ({
         </div>
       )}
 
-      {/* Message bar */}
-      <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20">
-        <div className={`px-4 py-2 rounded-full text-sm font-medium backdrop-blur-sm ${
-          isMyTurn ? 'bg-yellow-600/80 text-black' : 'bg-black/60 text-gray-200'
-        }`}>
-          {gameState.lastMessage}
-          {isMyTurn && ' ◀ תורך!'}
-        </div>
-      </div>
-
       {/* Trick counter */}
       <div className="absolute top-3 left-4 z-20 bg-black/60 backdrop-blur-sm rounded-lg px-3 py-1.5 text-sm">
         <span className="text-gray-400">לקיחה: </span>
@@ -750,6 +841,61 @@ export const GameTable: React.FC<GameTableProps> = ({
         <span className="text-blue-400">{gameState.team1TricksWon}</span>
         <span className="text-gray-500"> - </span>
         <span className="text-red-400">{gameState.team2TricksWon}</span>
+      </div>
+
+      {/* Trump Badge - Top Right */}
+      {gameState.trumpSuit && (
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20">
+          <div
+            className="rounded-xl px-5 py-3 backdrop-blur-md border-2 shadow-lg transition-all"
+            style={{
+              backgroundColor: `${SUIT_COLORS[gameState.trumpSuit]}22`,
+              borderColor: SUIT_COLORS[gameState.trumpSuit],
+              boxShadow: `0 0 20px ${SUIT_COLORS[gameState.trumpSuit]}88`,
+            }}
+          >
+            <div className="flex items-center gap-2">
+              <span className="text-2xl">{SUIT_SYMBOLS[gameState.trumpSuit]}</span>
+              <div className="flex flex-col">
+                <span className="text-xs text-gray-400">אטו</span>
+                <span className="text-sm font-bold" style={{ color: SUIT_COLORS[gameState.trumpSuit] }}>
+                  {SUIT_NAMES_HE[gameState.trumpSuit]}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Score Pill - Top Center */}
+      <button
+        onClick={() => setShowScorePill(!showScorePill)}
+        className="absolute top-16 left-1/2 -translate-x-1/2 z-20 transition-all"
+      >
+        <div className="bg-gradient-to-r from-blue-900/80 to-red-900/80 backdrop-blur-sm rounded-full px-4 py-2 text-sm font-bold border border-gray-600 hover:border-yellow-400 hover:shadow-lg hover:shadow-yellow-400/50">
+          <span className="text-blue-400">🔵{gameState.scores.team1}</span>
+          <span className="text-gray-500 mx-2">-</span>
+          <span className="text-red-400">🔴{gameState.scores.team2}</span>
+        </div>
+      </button>
+
+      {/* Score Pill Expanded */}
+      {showScorePill && (
+        <div className="absolute inset-0 z-50 bg-black/50 flex items-center justify-center" onClick={() => setShowScorePill(false)}>
+          <div onClick={e => e.stopPropagation()}>
+            <Scoreboard gameState={gameState} onClose={() => setShowScorePill(false)} />
+          </div>
+        </div>
+      )}
+
+      {/* Message bar */}
+      <div className="absolute top-28 left-1/2 -translate-x-1/2 z-20">
+        <div className={`px-4 py-2 rounded-full text-sm font-medium backdrop-blur-sm ${
+          isMyTurn ? 'bg-yellow-600/80 text-black' : 'bg-black/60 text-gray-200'
+        }`}>
+          {gameState.lastMessage}
+          {isMyTurn && ' ◀ תורך!'}
+        </div>
       </div>
 
       {/* Singing indicators */}
@@ -808,6 +954,7 @@ export const GameTable: React.FC<GameTableProps> = ({
                   selected={isSelected}
                   useCustomImages={useCustomImages}
                   imageSrc={useCustomImages ? `/cards/${card.suit}/${card.rank}.png` : undefined}
+                  isBiddingPhase={gameState.phase === GamePhase.BIDDING}
                   onClick={() => {
                     if (gameState.phase === GamePhase.TRICK_PLAY && !dragStateRef.current.isDragging) {
                       setSelectedCardId(isSelected ? null : card.id);
@@ -872,14 +1019,6 @@ export const GameTable: React.FC<GameTableProps> = ({
       {renderRoundScoring()}
       {renderGameOver()}
 
-      {/* Scoreboard overlay */}
-      {showScoreboard && (
-        <div className="absolute inset-0 z-50 bg-black/50 flex items-center justify-center" onClick={() => setShowScoreboard(false)}>
-          <div onClick={e => e.stopPropagation()}>
-            <Scoreboard gameState={gameState} onClose={() => setShowScoreboard(false)} />
-          </div>
-        </div>
-      )}
 
       {/* Debug toggle */}
       {showDebug && (
