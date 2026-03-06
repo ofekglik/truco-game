@@ -794,7 +794,7 @@ export const GameTable: React.FC<GameTableProps> = ({
                 className={`absolute transition-all ${isDragging ? 'opacity-50' : ''}`}
                 style={{
                   bottom: `${yOffset}px`,
-                  left: '50%',
+                  left: `calc(50% + ${offset * 45}px)`,
                   transform: `translateX(-50%) rotate(${rotation}deg) ${isSelected ? 'translateY(-20px)' : ''}`,
                   transformOrigin: 'bottom center',
                   zIndex: isSelected ? 100 : i,

@@ -136,7 +136,7 @@ export const WaitingRoom: React.FC<WaitingRoomProps> = ({
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-b from-gray-900 via-gray-900 to-black p-4 relative overflow-hidden">
+    <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-b from-gray-900 via-gray-900 to-black p-4 relative overflow-y-auto">
       {/* Card pattern background */}
       <div className="absolute inset-0 opacity-5">
         <div className="absolute inset-0" style={{

@@ -160,11 +160,7 @@ io.on('connection', (socket) => {
 
     broadcastState(result.room);
 
-    // Auto-start if full
-    if (isRoomFull(result.room) && result.room.state.phase === GamePhase.WAITING) {
-      startRound(result.room.state);
-      broadcastState(result.room);
-    }
+    // Room creator (admin) starts manually via 'startGame' event
   });
   
   socket.on('startGame', () => {
