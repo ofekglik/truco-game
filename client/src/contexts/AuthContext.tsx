@@ -56,7 +56,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  // Check for existing session on mount
+  // Single auth listener - handles both initial session and state changes
+  // Using only onAuthStateChange avoids the lock race condition between
+  // getSession() and onAuthStateChange that causes "AbortError: Lock broken"
   useEffect(() => {
     if (!isSupabaseEnabled) {
       setLoading(false);
@@ -67,36 +69,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const timeout = setTimeout(() => {
       setLoading(false);
     }, 5000);
-
-    const checkSession = async () => {
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session?.user) {
-          setUser(session.user);
-          const profileData = await fetchProfile(session.user.id);
-          if (profileData) {
-            setProfile(profileData);
-            setNeedsNickname(false);
-          } else {
-            setNeedsNickname(true);
-          }
-        }
-      } catch (error) {
-        console.error('Error checking session:', error);
-      } finally {
-        clearTimeout(timeout);
-        setLoading(false);
-      }
-    };
-
-    checkSession();
-
-    return () => clearTimeout(timeout);
-  }, [isSupabaseEnabled]);
-
-  // Listen for auth state changes
-  useEffect(() => {
-    if (!isSupabaseEnabled) return;
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       try {
@@ -117,11 +89,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } catch (error) {
         console.error('Auth state change error:', error);
       } finally {
+        clearTimeout(timeout);
         setLoading(false);
       }
     });
 
     return () => {
+      clearTimeout(timeout);
       subscription?.unsubscribe();
     };
   }, [isSupabaseEnabled]);
