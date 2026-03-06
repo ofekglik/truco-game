@@ -1,30 +1,34 @@
 import React, { useState } from 'react';
 
 interface LobbyProps {
-  onCreateRoom: (name: string, targetScore?: number) => void;
-  onJoinRoom: (code: string, name: string) => void;
+  onCreateRoom: (name: string, targetScore?: number, avatar?: string) => void;
+  onJoinRoom: (code: string, name: string, avatar?: string) => void;
   error: string | null;
   connected: boolean;
 }
+
+const AVATARS = ['🦁', '🐺', '🦊', '🐸', '🦉', '🐯', '🦅', '🐻', '🎭', '👑', '🎪', '🎯'];
 
 export const Lobby: React.FC<LobbyProps> = ({ onCreateRoom, onJoinRoom, error, connected }) => {
   const [name, setName] = useState('');
   const [roomCode, setRoomCode] = useState('');
   const [targetScore, setTargetScore] = useState(1000);
+  const [selectedAvatar, setSelectedAvatar] = useState(AVATARS[0]);
   const [mode, setMode] = useState<'menu' | 'create' | 'join'>('menu');
 
   const handleCreate = () => {
-    if (name.trim()) onCreateRoom(name.trim(), targetScore);
+    if (name.trim()) onCreateRoom(name.trim(), targetScore, selectedAvatar);
   };
 
   const handleJoin = () => {
-    if (name.trim() && roomCode.trim()) onJoinRoom(roomCode.trim().toUpperCase(), name.trim());
+    if (name.trim() && roomCode.trim()) onJoinRoom(roomCode.trim().toUpperCase(), name.trim(), selectedAvatar);
   };
 
   const resetForm = () => {
     setName('');
     setRoomCode('');
     setTargetScore(1000);
+    setSelectedAvatar(AVATARS[0]);
   };
 
   const goToMenu = () => {
@@ -109,6 +113,26 @@ export const Lobby: React.FC<LobbyProps> = ({ onCreateRoom, onJoinRoom, error, c
           {/* Create Room Mode */}
           {mode === 'create' && (
             <div className="space-y-5 animate-in fade-in duration-300">
+              {/* Avatar Selection */}
+              <div className="space-y-2">
+                <label className="block text-yellow-300 text-sm font-semibold">😊 בחר אווטאר</label>
+                <div className="grid grid-cols-6 gap-2">
+                  {AVATARS.map(avatar => (
+                    <button
+                      key={avatar}
+                      onClick={() => setSelectedAvatar(avatar)}
+                      className={`aspect-square rounded-xl text-2xl transition-all duration-200 flex items-center justify-center ${
+                        selectedAvatar === avatar
+                          ? 'ring-4 ring-yellow-400 bg-yellow-500/20 scale-110'
+                          : 'bg-[#0a0a0f] hover:bg-yellow-500/10'
+                      }`}
+                    >
+                      {avatar}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               {/* Player Name Input */}
               <div className="space-y-2">
                 <label className="block text-yellow-300 text-sm font-semibold">👤 שם השחקן</label>
@@ -169,6 +193,26 @@ export const Lobby: React.FC<LobbyProps> = ({ onCreateRoom, onJoinRoom, error, c
           {/* Join Room Mode */}
           {mode === 'join' && (
             <div className="space-y-5 animate-in fade-in duration-300">
+              {/* Avatar Selection */}
+              <div className="space-y-2">
+                <label className="block text-yellow-300 text-sm font-semibold">😊 בחר אווטאר</label>
+                <div className="grid grid-cols-6 gap-2">
+                  {AVATARS.map(avatar => (
+                    <button
+                      key={avatar}
+                      onClick={() => setSelectedAvatar(avatar)}
+                      className={`aspect-square rounded-xl text-2xl transition-all duration-200 flex items-center justify-center ${
+                        selectedAvatar === avatar
+                          ? 'ring-4 ring-yellow-400 bg-yellow-500/20 scale-110'
+                          : 'bg-[#0a0a0f] hover:bg-yellow-500/10'
+                      }`}
+                    >
+                      {avatar}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               {/* Player Name Input */}
               <div className="space-y-2">
                 <label className="block text-yellow-300 text-sm font-semibold">👤 שם השחקן</label>

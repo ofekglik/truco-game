@@ -5,7 +5,7 @@ import cors from 'cors';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import {
-  createRoom, joinRoom, getRoom, getRoomByCode, removePlayer, isRoomFull, swapSeat, updateRoomSettings, type Room
+  createRoom, joinRoom, getRoom, getRoomByCode, removePlayer, isRoomFull, swapSeat, updateRoomSettings, leaveRoom, type Room
 } from './rooms/roomManager.js';
 import {
   startRound, placeBid, declareTrump, singCante, doneSinging, playCard, nextRound, getClientState
@@ -33,6 +33,9 @@ const io = new Server(httpServer, {
   transports: ['websocket', 'polling'],
 });
 
+// Turn timer system: Map<roomCode, Map<seat, timeoutId>>
+const turnTimers = new Map<string, Map<SeatPosition, NodeJS.Timeout>>();
+
 function broadcastState(room: Room | null) {
   if (!room) return;
   for (const seat of SEAT_ORDER) {
@@ -41,6 +44,57 @@ function broadcastState(room: Room | null) {
       const clientState = getClientState(room.state, seat);
       io.to(socketId).emit('gameState', clientState);
     }
+  }
+
+  // Set up turn timer if needed
+  setUpTurnTimer(room);
+}
+
+function setUpTurnTimer(room: Room) {
+  const { code, state } = room;
+
+  // Clear existing timers for this room
+  const roomTimers = turnTimers.get(code);
+  if (roomTimers) {
+    roomTimers.forEach(timer => clearTimeout(timer));
+    roomTimers.clear();
+  }
+
+  // Set new timer if in a phase that needs one
+  const phasesNeedingTimer = [GamePhase.BIDDING, GamePhase.TRICK_PLAY, GamePhase.TRUMP_DECLARATION, GamePhase.SINGING];
+  if (phasesNeedingTimer.includes(state.phase)) {
+    const timer = setTimeout(() => {
+      // Auto-action for timeout
+      const socketId = room.seatToSocket.get(state.currentTurnSeat);
+      if (!socketId) return;
+
+      console.log(`[turnTimeout] ${state.currentTurnSeat} in room ${code} phase ${state.phase}`);
+
+      if (state.phase === GamePhase.BIDDING) {
+        placeBid(state, state.currentTurnSeat, 0); // auto-pass
+      } else if (state.phase === GamePhase.TRUMP_DECLARATION) {
+        // Auto-declare the first suit available
+        const suits = Object.values(Suit);
+        if (suits.length > 0) {
+          declareTrump(state, state.currentTurnSeat, suits[0]);
+        }
+      } else if (state.phase === GamePhase.SINGING) {
+        doneSinging(state, state.currentTurnSeat);
+      } else if (state.phase === GamePhase.TRICK_PLAY) {
+        const player = state.players[state.currentTurnSeat];
+        if (player && player.hand.length > 0) {
+          // Play first card
+          playCard(state, state.currentTurnSeat, player.hand[0].id);
+        }
+      }
+
+      broadcastState(room);
+    }, 60000); // 60 second timeout
+
+    if (!turnTimers.has(code)) {
+      turnTimers.set(code, new Map());
+    }
+    turnTimers.get(code)!.set(state.currentTurnSeat, timer);
   }
 }
 
@@ -66,8 +120,8 @@ io.on('connection', (socket) => {
     console.log(`[rejoinRoom] success: ${playerName} back in seat ${result.seat}`);
   });
 
-  socket.on('createRoom', (playerName: string, targetScore?: number) => {
-    const result = createRoom(socket.id, playerName);
+  socket.on('createRoom', (playerName: string, targetScore?: number, avatar?: string) => {
+    const result = createRoom(socket.id, playerName, avatar || '');
     if (!result) {
       socket.emit('roomError', 'שגיאה ביצירת חדר');
       return;
@@ -85,8 +139,8 @@ io.on('connection', (socket) => {
     broadcastState(result.room);
   });
   
-  socket.on('joinRoom', ({ roomCode, playerName }: { roomCode: string; playerName: string }) => {
-    const result = joinRoom(roomCode, socket.id, playerName);
+  socket.on('joinRoom', ({ roomCode, playerName, avatar }: { roomCode: string; playerName: string; avatar?: string }) => {
+    const result = joinRoom(roomCode, socket.id, playerName, avatar || '');
     if ('error' in result) {
       socket.emit('roomError', result.error);
       return;
@@ -97,15 +151,15 @@ io.on('connection', (socket) => {
       seat: result.seat,
       playerName,
     });
-    
+
     // Notify others
     socket.to(result.room.code).emit('playerJoined', {
       seat: result.seat,
       name: playerName,
     });
-    
+
     broadcastState(result.room);
-    
+
     // Auto-start if full
     if (isRoomFull(result.room) && result.room.state.phase === GamePhase.WAITING) {
       startRound(result.room.state);
@@ -213,6 +267,16 @@ io.on('connection', (socket) => {
     if (result) {
       broadcastState(result.room);
     }
+  });
+
+  socket.on('leaveRoom', () => {
+    console.log(`Player leaving room: ${socket.id}`);
+    const result = leaveRoom(socket.id);
+    if (result) {
+      io.to(result.room.code).emit('playerLeft', { seat: result.seat });
+      broadcastState(result.room);
+    }
+    socket.leave('*');
   });
 
   socket.on('disconnect', () => {

@@ -7,10 +7,10 @@ import { GamePhase } from './types';
 
 function App() {
   const {
-    connected, gameState, roomInfo, error,
+    connected, reconnecting, gameState, roomInfo, error,
     createRoom, joinRoom, startGame,
     placeBid, passBid, declareTrump, singCante, doneSinging, playCard, nextRound,
-    swapSeat, updateSettings,
+    swapSeat, updateSettings, leaveRoom,
   } = useSocket();
 
   // Not in a room yet
@@ -43,6 +43,9 @@ function App() {
         onSingCante={singCante}
         onDoneSinging={doneSinging}
         onNextRound={nextRound}
+        onLeaveRoom={leaveRoom}
+        reconnecting={reconnecting}
+        connected={connected}
       />
     );
   }

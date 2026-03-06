@@ -12,6 +12,7 @@ export function useSocket() {
   const socketRef = useRef<Socket | null>(null);
   const roomInfoRef = useRef<RoomInfo | null>(null);
   const [connected, setConnected] = useState(false);
+  const [reconnecting, setReconnecting] = useState(false);
   const [gameState, setGameState] = useState<ClientGameState | null>(null);
   const [roomInfo, setRoomInfo] = useState<RoomInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -24,6 +25,7 @@ export function useSocket() {
 
     socket.on('connect', () => {
       setConnected(true);
+      setReconnecting(false);
       // Auto-rejoin room after reconnection (e.g. iPhone background/lock)
       const info = roomInfoRef.current;
       if (info) {
@@ -31,7 +33,10 @@ export function useSocket() {
         socket.emit('rejoinRoom', { roomCode: info.roomCode, playerName: info.playerName });
       }
     });
-    socket.on('disconnect', () => setConnected(false));
+    socket.on('disconnect', () => {
+      setConnected(false);
+      setReconnecting(true);
+    });
     socket.on('gameState', (state: ClientGameState) => setGameState(state));
     socket.on('roomJoined', (data: RoomInfo) => {
       setRoomInfo(data);
@@ -45,12 +50,12 @@ export function useSocket() {
     };
   }, []);
 
-  const createRoom = useCallback((name: string, targetScore?: number) => {
-    socketRef.current?.emit('createRoom', name, targetScore);
+  const createRoom = useCallback((name: string, targetScore?: number, avatar?: string) => {
+    socketRef.current?.emit('createRoom', name, targetScore, avatar || '');
   }, []);
 
-  const joinRoom = useCallback((code: string, name: string) => {
-    socketRef.current?.emit('joinRoom', { roomCode: code, playerName: name });
+  const joinRoom = useCallback((code: string, name: string, avatar?: string) => {
+    socketRef.current?.emit('joinRoom', { roomCode: code, playerName: name, avatar: avatar || '' });
   }, []);
 
   const startGame = useCallback(() => {
@@ -93,8 +98,13 @@ export function useSocket() {
     socketRef.current?.emit('updateSettings', settings);
   }, []);
 
+  const leaveRoom = useCallback(() => {
+    socketRef.current?.emit('leaveRoom');
+  }, []);
+
   return {
     connected,
+    reconnecting,
     gameState,
     roomInfo,
     error,
@@ -110,5 +120,6 @@ export function useSocket() {
     nextRound,
     swapSeat,
     updateSettings,
+    leaveRoom,
   };
 }

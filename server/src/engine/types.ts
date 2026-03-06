@@ -50,6 +50,7 @@ export interface Player {
   seat: SeatPosition;
   hand: Card[];
   connected: boolean;
+  avatar: string;
 }
 
 export enum GamePhase {
@@ -110,6 +111,7 @@ export interface GameState {
   players: Record<SeatPosition, Player | null>;
   dealerSeat: SeatPosition;
   currentTurnSeat: SeatPosition;
+  turnStartedAt: number;
 
   // Bidding
   bids: Bid[];
@@ -151,9 +153,10 @@ export interface ClientGameState {
   phase: GamePhase;
   myHand: Card[];
   mySeat: SeatPosition;
-  players: Record<SeatPosition, { name: string; cardCount: number; connected: boolean } | null>;
+  players: Record<SeatPosition, { name: string; cardCount: number; connected: boolean; avatar: string } | null>;
   dealerSeat: SeatPosition;
   currentTurnSeat: SeatPosition;
+  turnStartedAt: number;
   bids: Bid[];
   currentBidAmount: number;
   currentBidWinner: SeatPosition | null;
@@ -196,6 +199,7 @@ export interface ServerToClientEvents {
   playerJoined: (data: { seat: SeatPosition; name: string }) => void;
   playerLeft: (data: { seat: SeatPosition }) => void;
   roomClosed: () => void;
+  turnTimeout: (data: { seat: SeatPosition }) => void;
 }
 
 export interface ClientToServerEvents {
@@ -211,4 +215,5 @@ export interface ClientToServerEvents {
   nextRound: () => void;
   swapSeat: (targetSeat: SeatPosition) => void;
   updateSettings: (settings: { targetScore: number }) => void;
+  leaveRoom: () => void;
 }

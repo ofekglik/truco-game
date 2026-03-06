@@ -14,6 +14,7 @@ export function createInitialState(): GameState {
     players: { north: null, south: null, east: null, west: null },
     dealerSeat: 'south',
     currentTurnSeat: 'east',
+    turnStartedAt: Date.now(),
     bids: [],
     currentBidAmount: 0,
     currentBidWinner: null,
@@ -40,25 +41,26 @@ export function createInitialState(): GameState {
 export function startRound(state: GameState): GameState {
   const deck = shuffleDeck(createDeck());
   const [hand1, hand2, hand3, hand4] = dealCards(deck);
-  
+
   const seatHands: Record<SeatPosition, Card[]> = {
     south: hand1,
     east: hand2,
     north: hand3,
     west: hand4,
   };
-  
+
   // Assign hands
   for (const seat of SEAT_ORDER) {
     if (state.players[seat]) {
       state.players[seat]!.hand = seatHands[seat];
     }
   }
-  
+
   const firstPlayer = getNextSeat(state.dealerSeat);
-  
+
   state.phase = GamePhase.CAPO_CHECK;
   state.currentTurnSeat = firstPlayer;
+  state.turnStartedAt = Date.now();
   state.bids = [];
   state.currentBidAmount = 0;
   state.currentBidWinner = null;
@@ -76,7 +78,7 @@ export function startRound(state: GameState): GameState {
   state.team2TricksWon = 0;
   state.roundNumber++;
   state.lastMessage = 'חלוקת קלפים...';
-  
+
   // Check for technical capo
   const technicalCapo = checkTechnicalCapo(state);
   if (technicalCapo) {
@@ -85,10 +87,11 @@ export function startRound(state: GameState): GameState {
     state.biddingTeam = SEAT_TEAM[technicalCapo.seat];
     state.phase = GamePhase.TRUMP_DECLARATION;
     state.currentTurnSeat = technicalCapo.seat;
+    state.turnStartedAt = Date.now();
     state.lastMessage = `${state.players[technicalCapo.seat]?.name} מכריז קאפו טכני! (4 ${technicalCapo.type === 'kings' ? 'מלכים' : 'סוסים'})`;
     return state;
   }
-  
+
   // No technical capo - go to bidding
   state.phase = GamePhase.BIDDING;
   state.lastMessage = `תור ${state.players[firstPlayer]?.name} להציע`;
@@ -116,14 +119,14 @@ export function placeBid(state: GameState, seat: SeatPosition, amount: number): 
   if (amount !== 0 && amount % 10 !== 0) return state; // Must be multiple of 10
   if (amount !== 0 && amount <= state.currentBidAmount) return state;
   if (amount > 230) return state;
-  
+
   const bid: Bid = { seat, amount };
   state.bids.push(bid);
-  
+
   if (amount > 0) {
     state.currentBidAmount = amount;
     state.currentBidWinner = seat;
-    
+
     if (amount === 230) {
       // Bid capo
       state.capoType = CapoType.BID;
@@ -131,37 +134,40 @@ export function placeBid(state: GameState, seat: SeatPosition, amount: number): 
       state.biddingTeam = SEAT_TEAM[seat];
       state.phase = GamePhase.TRUMP_DECLARATION;
       state.currentTurnSeat = seat;
+      state.turnStartedAt = Date.now();
       state.lastMessage = `${state.players[seat]?.name} הכריז קאפו!`;
       return state;
     }
   }
-  
+
   // Move to next non-passed player
   let nextSeat = getNextSeat(seat);
   let passCount = 0;
-  
+
   while (passCount < 4) {
     // Check if this player already passed
     const playerBids = state.bids.filter(b => b.seat === nextSeat);
     const hasPassed = playerBids.some(b => b.amount === 0);
     const isCurrentWinner = nextSeat === state.currentBidWinner;
-    
+
     if (!hasPassed && !isCurrentWinner) {
       state.currentTurnSeat = nextSeat;
+      state.turnStartedAt = Date.now();
       state.lastMessage = `תור ${state.players[nextSeat]?.name} להציע`;
       return state;
     }
-    
+
     nextSeat = getNextSeat(nextSeat);
     passCount++;
   }
-  
+
   // Everyone else passed
   if (state.currentBidWinner) {
     // We have a winner
     state.biddingTeam = SEAT_TEAM[state.currentBidWinner];
     state.phase = GamePhase.TRUMP_DECLARATION;
     state.currentTurnSeat = state.currentBidWinner;
+    state.turnStartedAt = Date.now();
     state.lastMessage = `${state.players[state.currentBidWinner]?.name} זכה בהצעה (${state.currentBidAmount}). בחר אטו.`;
   } else {
     // All passed - reshuffle
@@ -169,7 +175,7 @@ export function placeBid(state: GameState, seat: SeatPosition, amount: number): 
     state.lastMessage = 'כולם עברו. ערבוב מחדש...';
     return startRound(state);
   }
-  
+
   return state;
 }
 
@@ -243,6 +249,7 @@ export function doneSinging(state: GameState, seat: SeatPosition): GameState {
         const singable = getSingableSuits(player.hand, state.trumpSuit, state.currentBidAmount, state.cantes, nextSeat, state.biddingTeam!);
         if (singable.length > 0) {
           state.currentTurnSeat = nextSeat;
+          state.turnStartedAt = Date.now();
           return state;
         }
       }
@@ -262,6 +269,7 @@ export function doneSinging(state: GameState, seat: SeatPosition): GameState {
       // Winner leads next trick
       state.trickNumber++;
       state.currentTurnSeat = lastTrick.winnerSeat;
+      state.turnStartedAt = Date.now();
       state.currentTrick = { cards: [], leadSeat: lastTrick.winnerSeat };
     }
   }
@@ -274,6 +282,7 @@ function startTrickPhase(state: GameState) {
   state.trickNumber = 1;
   const firstPlayer = getNextSeat(state.dealerSeat);
   state.currentTurnSeat = firstPlayer;
+  state.turnStartedAt = Date.now();
   state.currentTrick = { cards: [], leadSeat: firstPlayer };
   state.lastMessage = `שלב לקיחה. תור ${state.players[firstPlayer]?.name}`;
 }
@@ -380,9 +389,11 @@ export function playCard(state: GameState, seat: SeatPosition, cardId: string): 
     // Next trick
     state.trickNumber++;
     state.currentTurnSeat = winner.seat;
+    state.turnStartedAt = Date.now();
     state.currentTrick = { cards: [], leadSeat: winner.seat };
   } else {
     state.currentTurnSeat = getNextSeat(seat);
+    state.turnStartedAt = Date.now();
     state.lastMessage = `תור ${state.players[state.currentTurnSeat]?.name}`;
   }
   
@@ -575,7 +586,7 @@ export function getClientState(state: GameState, seat: SeatPosition): ClientGame
   const players: ClientGameState['players'] = {} as any;
   for (const s of SEAT_ORDER) {
     const p = state.players[s];
-    players[s] = p ? { name: p.name, cardCount: p.hand.length, connected: p.connected } : null;
+    players[s] = p ? { name: p.name, cardCount: p.hand.length, connected: p.connected, avatar: p.avatar } : null;
   }
 
   return {
@@ -585,6 +596,7 @@ export function getClientState(state: GameState, seat: SeatPosition): ClientGame
     players,
     dealerSeat: state.dealerSeat,
     currentTurnSeat: state.currentTurnSeat,
+    turnStartedAt: state.turnStartedAt,
     bids: state.bids,
     currentBidAmount: state.currentBidAmount,
     currentBidWinner: state.currentBidWinner,

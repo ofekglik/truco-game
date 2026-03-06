@@ -15,9 +15,11 @@ interface GameTableProps {
   onSingCante: (suit: Suit) => void;
   onDoneSinging: () => void;
   onNextRound: () => void;
+  onLeaveRoom: () => void;
+  reconnecting: boolean;
+  connected: boolean;
 }
 
-// Map seats to screen positions relative to current player (always at bottom)
 function getRelativePosition(mySeat: SeatPosition, targetSeat: SeatPosition): 'bottom' | 'left' | 'right' | 'top' {
   const order: SeatPosition[] = ['south', 'east', 'north', 'west'];
   const myIdx = order.indexOf(mySeat);
@@ -26,7 +28,6 @@ function getRelativePosition(mySeat: SeatPosition, targetSeat: SeatPosition): 'b
   return (['bottom', 'left', 'top', 'right'] as const)[diff];
 }
 
-// Sound utilities
 const createOscillatorSound = (frequency: number, duration: number, type: 'sine' | 'square' | 'triangle' | 'sawtooth' = 'sine') => {
   const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
   const oscillator = audioContext.createOscillator();
@@ -60,19 +61,24 @@ const playWinSound = () => {
 };
 
 export const GameTable: React.FC<GameTableProps> = ({
-  gameState, onPlayCard, onPlaceBid, onPassBid, onDeclareTrump, onSingCante, onDoneSinging, onNextRound
+  gameState, onPlayCard, onPlaceBid, onPassBid, onDeclareTrump, onSingCante, onDoneSinging, onNextRound,
+  onLeaveRoom, reconnecting, connected
 }) => {
   const [bidAmount, setBidAmount] = useState(70);
   const [showScoreboard, setShowScoreboard] = useState(false);
   const [showDebug, setShowDebug] = useState(false);
+  const [showMenu, setShowMenu] = useState(false);
+  const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
   const [soundEnabled, setSoundEnabled] = useState(() => {
     const saved = localStorage.getItem('soundEnabled');
     return saved === null ? true : saved === 'true';
   });
+  const [useCustomImages, setUseCustomImages] = useState(false);
   const [handOrder, setHandOrder] = useState<string[]>([]);
   const [trickToast, setTrickToast] = useState<{ winner: string; team1: number; team2: number } | null>(null);
   const [lastCompletedTricksLength, setLastCompletedTricksLength] = useState(0);
+  const [windowWidth, setWindowWidth] = useState(window.innerWidth);
 
   const dragStateRef = useRef<{
     isDragging: boolean;
@@ -90,13 +96,28 @@ export const GameTable: React.FC<GameTableProps> = ({
 
   const { validActions } = gameState;
   const isMyTurn = gameState.currentTurnSeat === gameState.mySeat;
+  const isMobile = windowWidth < 768;
+  const isLandscape = window.innerHeight < window.innerWidth;
 
-  // Persist sound preference
+  // Check for custom card images on mount
+  useEffect(() => {
+    const img = new Image();
+    img.onload = () => setUseCustomImages(true);
+    img.onerror = () => setUseCustomImages(false);
+    img.src = '/cards/oros/1.png';
+  }, []);
+
+  // Window resize listener
+  useEffect(() => {
+    const handleResize = () => setWindowWidth(window.innerWidth);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   useEffect(() => {
     localStorage.setItem('soundEnabled', String(soundEnabled));
   }, [soundEnabled]);
 
-  // Initialize hand order or reset on new round
   useEffect(() => {
     if (handOrder.length === 0 || gameState.roundNumber > (lastCompletedTricksLength > gameState.completedTricks.length ? gameState.roundNumber : -1)) {
       const defaultOrder = [...gameState.myHand].sort((a, b) => {
@@ -107,7 +128,6 @@ export const GameTable: React.FC<GameTableProps> = ({
     }
   }, [gameState.roundNumber, gameState.myHand.length]);
 
-  // Detect trick completion and show toast
   useEffect(() => {
     if (gameState.completedTricks.length > lastCompletedTricksLength && gameState.completedTricks.length > 0) {
       const lastTrick = gameState.completedTricks[gameState.completedTricks.length - 1];
@@ -127,7 +147,6 @@ export const GameTable: React.FC<GameTableProps> = ({
     }
   }, [gameState.completedTricks.length, gameState.team1TricksWon, gameState.team2TricksWon, soundEnabled]);
 
-  // Play turn sound when it becomes our turn
   useEffect(() => {
     if (isMyTurn && soundEnabled) {
       playTurnChime();
@@ -135,17 +154,14 @@ export const GameTable: React.FC<GameTableProps> = ({
     }
   }, [isMyTurn, soundEnabled]);
 
-  // Find the full card object for the selected card
   const selectedCard = selectedCardId ? gameState.myHand.find(c => c.id === selectedCardId) : null;
 
-  // Clear selection if it's no longer our turn or the card left our hand
   useEffect(() => {
     if (selectedCardId && (!isMyTurn || !selectedCard)) {
       setSelectedCardId(null);
     }
   }, [isMyTurn, selectedCardId, selectedCard]);
 
-  // Sort hand by custom order
   const sortedHand = handOrder
     .map(id => gameState.myHand.find(c => c.id === id))
     .filter((c): c is CardType => c !== undefined);
@@ -154,7 +170,7 @@ export const GameTable: React.FC<GameTableProps> = ({
     const isTouchEvent = 'touches' in e;
     if (isTouchEvent) {
       dragStateRef.current.touchStartTime = Date.now();
-      return; // Wait for hold detection
+      return;
     }
     const mouseEvent = e as React.MouseEvent;
     dragStateRef.current.isDragging = true;
@@ -172,7 +188,6 @@ export const GameTable: React.FC<GameTableProps> = ({
     const draggedIdx = sortedHand.findIndex(c => c.id === dragStateRef.current.draggedCardId);
     if (draggedIdx === -1) return;
 
-    // Simple left-right drag reordering
     const currentX = dragStateRef.current.startX;
     const threshold = 30;
     if (clientX < currentX - threshold && draggedIdx > 0) {
@@ -221,6 +236,39 @@ export const GameTable: React.FC<GameTableProps> = ({
     handleDragEnd();
   }, [handleDragEnd]);
 
+  const renderTurnTimer = () => {
+    const isCurrentTurnPlayer = isMyTurn;
+    if (!isCurrentTurnPlayer) return null;
+
+    const circumference = 2 * Math.PI * 18;
+    const elapsed = (Date.now() - gameState.turnStartedAt) / 1000;
+    const progress = Math.min(1, elapsed / 60);
+    const offset = circumference * (1 - progress);
+    const isLowTime = elapsed > 50;
+
+    return (
+      <svg width="44" height="44" className="absolute -bottom-12 left-1/2 -translate-x-1/2">
+        <circle
+          cx="22"
+          cy="22"
+          r="18"
+          fill="none"
+          stroke={isLowTime ? '#ef4444' : '#eab308'}
+          strokeWidth="2"
+          strokeDasharray={circumference}
+          strokeDashoffset={offset}
+          strokeLinecap="round"
+          style={{ transition: 'stroke-dashoffset 0.1s linear' }}
+        />
+        {elapsed < 15 && (
+          <text x="22" y="28" textAnchor="middle" className="text-xs font-bold" fill={isLowTime ? '#ef4444' : '#eab308'}>
+            {Math.ceil(60 - elapsed)}
+          </text>
+        )}
+      </svg>
+    );
+  };
+
   const renderOtherPlayer = (pos: 'left' | 'top' | 'right') => {
     const order: SeatPosition[] = ['south', 'east', 'north', 'west'];
     const myIdx = order.indexOf(gameState.mySeat);
@@ -242,15 +290,21 @@ export const GameTable: React.FC<GameTableProps> = ({
 
     return (
       <div key={seat} className={posClasses[pos]}>
-        <div className={`px-3 py-1.5 rounded-lg text-sm font-medium mb-2 border-2 ${
+        <div className={`relative px-3 py-1.5 rounded-lg text-sm font-medium mb-2 border-2 ${
           isCurrentTurn ? 'bg-yellow-600/30 border-yellow-500 text-yellow-300' : `bg-[#1a2a4e]/80 ${teamColor} text-gray-300`
         } ${!player.connected ? 'opacity-50' : ''}`}>
+          {player.avatar && <span className="mr-1">{player.avatar}</span>}
           {player.name}
           {!player.connected && ' (מנותק)'}
+          {isCurrentTurn && renderTurnTimer()}
         </div>
         <div className={`flex ${pos === 'left' || pos === 'right' ? 'flex-col -space-y-8' : 'flex-row -space-x-6'}`}>
           {Array.from({ length: player.cardCount }, (_, i) => (
-            <CardBack key={i} small />
+            <CardBack
+              key={i}
+              small
+              backImageSrc={useCustomImages ? '/cards/back.png' : undefined}
+            />
           ))}
         </div>
       </div>
@@ -267,13 +321,19 @@ export const GameTable: React.FC<GameTableProps> = ({
 
     return gameState.currentTrick.cards.map((tc, i) => {
       const pos = getRelativePosition(gameState.mySeat, tc.seat);
+      const cardImageSrc = useCustomImages ? `/cards/${tc.card.suit}/${tc.card.rank}.png` : undefined;
       return (
         <div
           key={i}
           className={`absolute ${positions[pos]} z-10 animate-slideIn`}
           style={{ animationDelay: `${i * 100}ms` }}
         >
-          <CardComponent card={tc.card} small />
+          <CardComponent
+            card={tc.card}
+            small
+            useCustomImages={useCustomImages}
+            imageSrc={cardImageSrc}
+          />
         </div>
       );
     });
@@ -281,7 +341,7 @@ export const GameTable: React.FC<GameTableProps> = ({
 
   const renderBiddingPanel = () => {
     if (gameState.phase !== GamePhase.BIDDING || !isMyTurn) return null;
-    
+
     return (
       <div className="absolute bottom-44 left-1/2 -translate-x-1/2 z-30 bg-[#16213e]/95 border border-[#4a5a7e] rounded-xl p-4 shadow-xl backdrop-blur-sm">
         <p className="text-center text-yellow-400 font-bold mb-3">הצעה שלך</p>
@@ -324,7 +384,7 @@ export const GameTable: React.FC<GameTableProps> = ({
 
   const renderTrumpPanel = () => {
     if (gameState.phase !== GamePhase.TRUMP_DECLARATION || !validActions.canDeclareTrump) return null;
-    
+
     return (
       <div className="absolute bottom-44 left-1/2 -translate-x-1/2 z-30 bg-[#16213e]/95 border border-[#4a5a7e] rounded-xl p-4 shadow-xl backdrop-blur-sm">
         <p className="text-center text-yellow-400 font-bold mb-3">בחר אטו (חליפה שולטת)</p>
@@ -350,7 +410,6 @@ export const GameTable: React.FC<GameTableProps> = ({
   };
 
   const renderSingingPanel = () => {
-    // Show singing panel to bidding team members during singing phase
     const isBiddingTeam = gameState.biddingTeam && SEAT_TEAM[gameState.mySeat] === gameState.biddingTeam;
     if (gameState.phase !== GamePhase.SINGING || !isBiddingTeam) return null;
 
@@ -391,11 +450,6 @@ export const GameTable: React.FC<GameTableProps> = ({
     if (gameState.phase !== GamePhase.ROUND_SCORING) return null;
     const lastRound = gameState.roundHistory[gameState.roundHistory.length - 1];
     if (!lastRound) return null;
-
-    const progressBar = Math.min(
-      100,
-      Math.max(gameState.scores.team1, gameState.scores.team2) / (gameState.targetScore || 300) * 100
-    );
 
     return (
       <div className="absolute inset-0 z-40 bg-black/70 flex items-center justify-center backdrop-blur-sm">
@@ -441,13 +495,13 @@ export const GameTable: React.FC<GameTableProps> = ({
             <div className="flex gap-2 mb-2">
               <div className="flex-1 bg-gray-700 rounded-full h-2 overflow-hidden">
                 <div
-                  className="bg-blue-500 h-full transition-all"
+                  className="bg-blue-500 h-full transition-all duration-1000"
                   style={{ width: `${Math.min(100, (gameState.scores.team1 / gameState.targetScore) * 100)}%` }}
                 />
               </div>
               <div className="flex-1 bg-gray-700 rounded-full h-2 overflow-hidden">
                 <div
-                  className="bg-red-500 h-full transition-all"
+                  className="bg-red-500 h-full transition-all duration-1000"
                   style={{ width: `${Math.min(100, (gameState.scores.team2 / gameState.targetScore) * 100)}%` }}
                 />
               </div>
@@ -490,6 +544,17 @@ export const GameTable: React.FC<GameTableProps> = ({
     );
   };
 
+  const handleLeaveRoom = () => {
+    setShowLeaveConfirm(false);
+    setShowMenu(false);
+    onLeaveRoom();
+  };
+
+  // Calculate fan card layout
+  const cardCount = sortedHand.length;
+  const fanSpreadDegrees = 8;
+  const fanHeightPx = 30;
+
   return (
     <div className="w-screen h-screen relative overflow-hidden bg-[#0d1b0e]">
       <style>{`
@@ -519,14 +584,36 @@ export const GameTable: React.FC<GameTableProps> = ({
         .animate-slideInTop {
           animation: slideInTop 0.4s ease-out forwards;
         }
+        @keyframes goldenGlow {
+          0%, 100% {
+            box-shadow: 0 0 0 rgba(251, 191, 36, 0);
+          }
+          50% {
+            box-shadow: 0 0 12px rgba(251, 191, 36, 0.6);
+          }
+        }
+        .animate-goldenGlow {
+          animation: goldenGlow 0.6s ease-in-out;
+        }
+        @keyframes slideInFromLeft {
+          from {
+            transform: translateX(-100%);
+          }
+          to {
+            transform: translateX(0);
+          }
+        }
+        .animate-slideInFromLeft {
+          animation: slideInFromLeft 0.3s ease-out;
+        }
       `}</style>
 
       {/* Table felt */}
-      <div className="absolute inset-8 rounded-[3rem] bg-gradient-to-br from-[#1a5c2a] to-[#0f3d1a] border-[12px] border-[#3a2010] shadow-inner">
-        {/* Table border decoration */}
+      <div className={`absolute inset-8 rounded-[3rem] bg-gradient-to-br from-[#1a5c2a] to-[#0f3d1a] border-[12px] border-[#3a2010] shadow-inner ${
+        isMobile ? 'inset-4' : ''
+      }`}>
         <div className="absolute inset-2 rounded-[2.5rem] border border-[#2a6a3a]/30" />
 
-        {/* Center info */}
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-center z-5">
           {gameState.trumpSuit && (
             <div className="bg-black/40 rounded-xl px-4 py-2 backdrop-blur-sm mb-2">
@@ -544,16 +631,12 @@ export const GameTable: React.FC<GameTableProps> = ({
           )}
         </div>
 
-        {/* Trick cards */}
         {renderTrickCards()}
-
-        {/* Other players */}
         {renderOtherPlayer('left')}
         {renderOtherPlayer('top')}
         {renderOtherPlayer('right')}
       </div>
 
-      {/* Trick toast */}
       {trickToast && (
         <div className="absolute top-16 left-1/2 -translate-x-1/2 z-25 animate-slideInTop">
           <div className="bg-black/80 backdrop-blur-sm rounded-lg px-4 py-2 text-sm text-white border border-gray-600">
@@ -561,6 +644,90 @@ export const GameTable: React.FC<GameTableProps> = ({
             <span className="text-blue-400 mx-2 font-bold">{trickToast.team1}</span>
             <span className="text-gray-500">-</span>
             <span className="text-red-400 mx-2 font-bold">{trickToast.team2}</span>
+          </div>
+        </div>
+      )}
+
+      {/* Reconnection Overlay */}
+      {reconnecting && (
+        <div className="absolute inset-0 z-60 bg-black/70 flex items-center justify-center backdrop-blur-sm">
+          <div className="text-center">
+            <div className="text-4xl mb-4 animate-spin">🔄</div>
+            <p className="text-gray-300 text-lg">מתחבר מחדש...</p>
+          </div>
+        </div>
+      )}
+
+      {/* Hamburger Menu */}
+      <button
+        onClick={() => setShowMenu(!showMenu)}
+        className="absolute top-4 right-4 z-50 text-2xl hover:scale-110 transition-transform"
+      >
+        ☰
+      </button>
+
+      {/* Menu Slide-out Panel */}
+      {showMenu && (
+        <>
+          <div
+            className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm"
+            onClick={() => setShowMenu(false)}
+          />
+          <div className="absolute top-0 right-0 h-full w-64 bg-[#1a2a4e] border-l border-blue-500 shadow-lg z-45 animate-slideInFromLeft">
+            <div className="p-6 space-y-4">
+              <h3 className="text-xl font-bold text-yellow-400 mb-6">תפריט</h3>
+
+              <button
+                onClick={() => setShowScoreboard(!showScoreboard)}
+                className="w-full py-3 px-4 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-lg transition-colors text-right"
+              >
+                📊 הצג טבלת ניקוד
+              </button>
+
+              <button
+                onClick={() => setSoundEnabled(!soundEnabled)}
+                className="w-full py-3 px-4 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-lg transition-colors text-right"
+              >
+                {soundEnabled ? '🔊' : '🔇'} {soundEnabled ? 'כבה צליל' : 'הדלק צליל'}
+              </button>
+
+              <button
+                onClick={() => setShowDebug(!showDebug)}
+                className="w-full py-3 px-4 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-lg transition-colors text-right"
+              >
+                🔧 {showDebug ? 'הסתר' : 'הצג'} Debug
+              </button>
+
+              <button
+                onClick={() => setShowLeaveConfirm(true)}
+                className="w-full py-3 px-4 bg-red-600 hover:bg-red-500 text-white font-bold rounded-lg transition-colors text-right"
+              >
+                🚪 עזוב משחק
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Leave Room Confirmation */}
+      {showLeaveConfirm && (
+        <div className="absolute inset-0 z-50 bg-black/70 flex items-center justify-center backdrop-blur-sm">
+          <div className="bg-[#16213e] border border-[#4a5a7e] rounded-2xl p-6 w-full max-w-sm shadow-2xl">
+            <h3 className="text-xl font-bold text-yellow-400 mb-4 text-center">בטוח שאתה רוצה לעזוב את המשחק?</h3>
+            <div className="flex gap-3">
+              <button
+                onClick={handleLeaveRoom}
+                className="flex-1 py-3 bg-red-600 hover:bg-red-500 text-white font-bold rounded-lg transition-colors"
+              >
+                כן, עזוב
+              </button>
+              <button
+                onClick={() => setShowLeaveConfirm(false)}
+                className="flex-1 py-3 bg-gray-600 hover:bg-gray-500 text-white font-bold rounded-lg transition-colors"
+              >
+                ביטול
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -576,7 +743,7 @@ export const GameTable: React.FC<GameTableProps> = ({
       </div>
 
       {/* Trick counter */}
-      <div className="absolute top-3 right-4 z-20 bg-black/60 backdrop-blur-sm rounded-lg px-3 py-1.5 text-sm">
+      <div className="absolute top-3 left-4 z-20 bg-black/60 backdrop-blur-sm rounded-lg px-3 py-1.5 text-sm">
         <span className="text-gray-400">לקיחה: </span>
         <span className="text-white font-bold">{gameState.trickNumber}/10</span>
         <span className="text-gray-500 mx-2">|</span>
@@ -585,28 +752,9 @@ export const GameTable: React.FC<GameTableProps> = ({
         <span className="text-red-400">{gameState.team2TricksWon}</span>
       </div>
 
-      {/* Score button */}
-      <div className="absolute top-3 left-4 z-20">
-        <button onClick={() => setShowScoreboard(!showScoreboard)}
-          className="bg-black/60 backdrop-blur-sm rounded-lg px-3 py-1.5 text-sm hover:bg-black/80 transition-colors">
-          <span className="text-blue-400 font-bold">{gameState.scores.team1}</span>
-          <span className="text-gray-500 mx-1">-</span>
-          <span className="text-red-400 font-bold">{gameState.scores.team2}</span>
-          <span className="text-gray-400 mr-2">📊</span>
-        </button>
-      </div>
-
-      {/* Sound toggle */}
-      <button
-        onClick={() => setSoundEnabled(!soundEnabled)}
-        className="absolute top-3 left-24 z-20 bg-black/60 backdrop-blur-sm rounded-lg px-3 py-1.5 text-sm hover:bg-black/80 transition-colors"
-      >
-        {soundEnabled ? '🔊' : '🔇'}
-      </button>
-
       {/* Singing indicators */}
       {gameState.cantes.length > 0 && (
-        <div className="absolute top-12 left-1/2 -translate-x-1/2 z-20 flex gap-2 flex-wrap justify-center max-w-xs">
+        <div className="absolute top-16 left-1/2 -translate-x-1/2 z-20 flex gap-2 flex-wrap justify-center max-w-xs">
           {gameState.cantes.map((c, i) => (
             <div key={i} className="bg-black/60 backdrop-blur-sm rounded-lg px-2 py-1 text-xs"
               style={{ color: SUIT_COLORS[c.suit] }}>
@@ -616,29 +764,40 @@ export const GameTable: React.FC<GameTableProps> = ({
         </div>
       )}
 
-      {/* My hand */}
+      {/* My hand - Fan layout */}
       <div
         className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 cursor-grab active:cursor-grabbing"
+        style={{
+          width: Math.max(300, cardCount * 60),
+          height: 200,
+        }}
         onMouseMove={handleDragMove}
         onMouseUp={handleDragEnd}
         onMouseLeave={handleDragEnd}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
       >
-        <div className="flex items-end justify-center" style={{ gap: '-0.25rem' }}>
+        <div className="relative w-full h-full flex items-end justify-center" style={{ perspective: '1000px' }}>
           {sortedHand.map((card, i) => {
             const isPlayable = validActions.playableCards.includes(card.id);
             const isSelected = selectedCardId === card.id;
             const isDragging = dragStateRef.current.draggedCardId === card.id;
-            const offset = (i - sortedHand.length / 2) * 2;
+
+            const centerIdx = (cardCount - 1) / 2;
+            const offset = i - centerIdx;
+            const rotation = offset * fanSpreadDegrees;
+            const yOffset = Math.cos((offset / (cardCount / 2)) * (Math.PI / 3)) * fanHeightPx;
 
             return (
               <div
                 key={card.id}
-                className={`transition-all ${isDragging ? 'opacity-50' : ''}`}
+                className={`absolute transition-all ${isDragging ? 'opacity-50' : ''}`}
                 style={{
-                  marginLeft: i > 0 ? '-0.5rem' : '0',
-                  transform: `rotate(${offset}deg) ${isSelected ? 'translateY(-8px)' : ''} ${isDragging ? 'scale(1.05)' : ''}`,
+                  bottom: `${yOffset}px`,
+                  left: '50%',
+                  transform: `translateX(-50%) rotate(${rotation}deg) ${isSelected ? 'translateY(-20px)' : ''}`,
+                  transformOrigin: 'bottom center',
+                  zIndex: isSelected ? 100 : i,
                 }}
                 onMouseDown={(e) => handleDragStart(card.id, e)}
                 onTouchStart={(e) => handleTouchStart(card.id, e)}
@@ -647,6 +806,8 @@ export const GameTable: React.FC<GameTableProps> = ({
                   card={card}
                   playable={isPlayable && gameState.phase === GamePhase.TRICK_PLAY}
                   selected={isSelected}
+                  useCustomImages={useCustomImages}
+                  imageSrc={useCustomImages ? `/cards/${card.suit}/${card.rank}.png` : undefined}
                   onClick={() => {
                     if (gameState.phase === GamePhase.TRICK_PLAY && !dragStateRef.current.isDragging) {
                       setSelectedCardId(isSelected ? null : card.id);
@@ -663,7 +824,12 @@ export const GameTable: React.FC<GameTableProps> = ({
       {selectedCard && gameState.phase === GamePhase.TRICK_PLAY && isMyTurn && (
         <div className="absolute bottom-36 left-1/2 -translate-x-1/2 z-30 flex flex-col items-center gap-2">
           <div className="bg-[#16213e]/95 border border-yellow-500 rounded-xl p-3 shadow-xl backdrop-blur-sm flex items-center gap-3">
-            <CardComponent card={selectedCard} small />
+            <CardComponent
+              card={selectedCard}
+              small
+              useCustomImages={useCustomImages}
+              imageSrc={useCustomImages ? `/cards/${selectedCard.suit}/${selectedCard.rank}.png` : undefined}
+            />
             <div className="flex flex-col gap-2">
               <button
                 onClick={() => {
@@ -689,10 +855,12 @@ export const GameTable: React.FC<GameTableProps> = ({
       {/* My name */}
       <div className="absolute bottom-32 left-1/2 -translate-x-1/2 z-20">
         {gameState.players[gameState.mySeat] && (
-          <div className={`px-3 py-1 rounded-lg text-sm font-medium border-2 ${
+          <div className={`relative px-3 py-1 rounded-lg text-sm font-medium border-2 ${
             isMyTurn ? 'bg-yellow-600/30 border-yellow-500 text-yellow-300' : 'bg-[#1a2a4e]/80 border-blue-500 text-gray-300'
           }`}>
+            {gameState.players[gameState.mySeat]!.avatar && <span className="mr-1">{gameState.players[gameState.mySeat]!.avatar}</span>}
             {gameState.players[gameState.mySeat]!.name} (אתה)
+            {isMyTurn && renderTurnTimer()}
           </div>
         )}
       </div>
@@ -714,10 +882,6 @@ export const GameTable: React.FC<GameTableProps> = ({
       )}
 
       {/* Debug toggle */}
-      <button onClick={() => setShowDebug(!showDebug)}
-        className="absolute bottom-2 right-2 z-50 text-[10px] text-gray-600 hover:text-white">
-        DBG
-      </button>
       {showDebug && (
         <div className="absolute bottom-8 right-2 z-50 bg-black/90 text-[10px] text-green-400 p-2 rounded font-mono max-w-xs max-h-48 overflow-auto" dir="ltr">
           <div>phase: {gameState.phase}</div>
@@ -729,6 +893,8 @@ export const GameTable: React.FC<GameTableProps> = ({
           <div>playable: [{validActions.playableCards.join(', ')}]</div>
           <div>hand: [{gameState.myHand.map(c => c.id).join(', ')}]</div>
           <div>handOrder: [{handOrder.join(', ')}]</div>
+          <div>connected: {String(connected)}</div>
+          <div>reconnecting: {String(reconnecting)}</div>
         </div>
       )}
     </div>

@@ -99,6 +99,9 @@ export const WaitingRoom: React.FC<WaitingRoomProps> = ({
 
             {/* Player content */}
             <div className="relative z-10 flex flex-col items-center justify-center">
+              {player.avatar && (
+                <p className="text-4xl mb-1">{player.avatar}</p>
+              )}
               <p className="text-white font-bold text-center text-sm leading-tight px-2 line-clamp-2">
                 {player.name}
               </p>

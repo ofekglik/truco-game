@@ -21,35 +21,36 @@ function generateRoomCode(): string {
   return code;
 }
 
-export function createRoom(socketId: string, playerName: string): { room: Room; seat: SeatPosition } | null {
+export function createRoom(socketId: string, playerName: string, avatar: string = ''): { room: Room; seat: SeatPosition } | null {
   let code = generateRoomCode();
   while (rooms.has(code)) code = generateRoomCode();
-  
+
   const state = createInitialState();
   const seat: SeatPosition = 'south';
-  
+
   state.players[seat] = {
     id: socketId,
     name: playerName,
     seat,
     hand: [],
     connected: true,
+    avatar,
   };
-  
+
   const room: Room = {
     code,
     state,
     socketToSeat: new Map([[socketId, seat]]),
     seatToSocket: new Map([[seat, socketId]]),
   };
-  
+
   rooms.set(code, room);
   socketToRoom.set(socketId, code);
-  
+
   return { room, seat };
 }
 
-export function joinRoom(roomCode: string, socketId: string, playerName: string): { room: Room; seat: SeatPosition } | { error: string } {
+export function joinRoom(roomCode: string, socketId: string, playerName: string, avatar: string = ''): { room: Room; seat: SeatPosition } | { error: string } {
   const room = rooms.get(roomCode.toUpperCase());
   if (!room) return { error: 'חדר לא נמצא' };
 
@@ -76,7 +77,7 @@ export function joinRoom(roomCode: string, socketId: string, playerName: string)
     }
     return { error: 'המשחק כבר התחיל' };
   }
-  
+
   // Find empty seat
   const seatOrder: SeatPosition[] = ['east', 'north', 'west', 'south'];
   let emptySeat: SeatPosition | null = null;
@@ -86,21 +87,22 @@ export function joinRoom(roomCode: string, socketId: string, playerName: string)
       break;
     }
   }
-  
+
   if (!emptySeat) return { error: 'החדר מלא' };
-  
+
   room.state.players[emptySeat] = {
     id: socketId,
     name: playerName,
     seat: emptySeat,
     hand: [],
     connected: true,
+    avatar,
   };
-  
+
   room.socketToSeat.set(socketId, emptySeat);
   room.seatToSocket.set(emptySeat, socketId);
   socketToRoom.set(socketId, room.code);
-  
+
   return { room, seat: emptySeat };
 }
 
@@ -197,4 +199,48 @@ export function updateRoomSettings(socketId: string, settings: { targetScore: nu
   }
 
   return { room };
+}
+
+export function leaveRoom(socketId: string): { room: Room; seat: SeatPosition } | null {
+  const code = socketToRoom.get(socketId);
+  if (!code) return null;
+
+  const room = rooms.get(code);
+  if (!room) return null;
+
+  const seat = room.socketToSeat.get(socketId);
+  if (!seat) return null;
+
+  // During WAITING phase, completely remove player and their seat
+  if (room.state.phase === GamePhase.WAITING) {
+    room.state.players[seat] = null;
+    room.socketToSeat.delete(socketId);
+    room.seatToSocket.delete(seat);
+    socketToRoom.delete(socketId);
+
+    // Check if room is empty
+    const anyPlayers = SEAT_ORDER.some(s => room.state.players[s] !== null);
+    if (!anyPlayers) {
+      rooms.delete(code);
+      return null;
+    }
+  } else {
+    // During active game, just mark as disconnected (same as removePlayer)
+    const player = room.state.players[seat];
+    if (player) {
+      player.connected = false;
+    }
+
+    room.socketToSeat.delete(socketId);
+    socketToRoom.delete(socketId);
+
+    // Check if room is empty
+    const connectedPlayers = SEAT_ORDER.filter(s => room.state.players[s]?.connected);
+    if (connectedPlayers.length === 0) {
+      rooms.delete(code);
+      return null;
+    }
+  }
+
+  return { room, seat };
 }

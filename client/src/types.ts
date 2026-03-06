@@ -124,9 +124,10 @@ export interface ClientGameState {
   phase: GamePhase;
   myHand: Card[];
   mySeat: SeatPosition;
-  players: Record<SeatPosition, { name: string; cardCount: number; connected: boolean } | null>;
+  players: Record<SeatPosition, { name: string; cardCount: number; connected: boolean; avatar: string } | null>;
   dealerSeat: SeatPosition;
   currentTurnSeat: SeatPosition;
+  turnStartedAt: number;
   bids: Bid[];
   currentBidAmount: number;
   currentBidWinner: SeatPosition | null;
