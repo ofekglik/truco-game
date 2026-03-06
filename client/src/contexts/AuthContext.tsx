@@ -36,6 +36,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isGuest, setIsGuest] = useState(false);
   const isSupabaseEnabled = isSupabaseConfigured();
 
+  // Helper to fetch user profile
+  const fetchProfile = async (userId: string): Promise<UserProfile | null> => {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .single();
+
+      if (error) {
+        console.warn('Profile fetch error:', error.message);
+        return null;
+      }
+      return data;
+    } catch (err) {
+      console.error('Profile fetch exception:', err);
+      return null;
+    }
+  };
+
   // Check for existing session on mount
   useEffect(() => {
     if (!isSupabaseEnabled) {
@@ -43,18 +63,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return;
     }
 
+    // Safety timeout - never stay on loading screen forever
+    const timeout = setTimeout(() => {
+      setLoading(false);
+    }, 5000);
+
     const checkSession = async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
         if (session?.user) {
           setUser(session.user);
-          // Fetch profile
-          const { data: profileData } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('id', session.user.id)
-            .single();
-
+          const profileData = await fetchProfile(session.user.id);
           if (profileData) {
             setProfile(profileData);
             setNeedsNickname(false);
@@ -65,11 +84,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } catch (error) {
         console.error('Error checking session:', error);
       } finally {
+        clearTimeout(timeout);
         setLoading(false);
       }
     };
 
     checkSession();
+
+    return () => clearTimeout(timeout);
   }, [isSupabaseEnabled]);
 
   // Listen for auth state changes
@@ -77,27 +99,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!isSupabaseEnabled) return;
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (session?.user) {
-        setUser(session.user);
-        // Fetch profile
-        const { data: profileData } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', session.user.id)
-          .single();
-
-        if (profileData) {
-          setProfile(profileData);
-          setNeedsNickname(false);
+      try {
+        if (session?.user) {
+          setUser(session.user);
+          const profileData = await fetchProfile(session.user.id);
+          if (profileData) {
+            setProfile(profileData);
+            setNeedsNickname(false);
+          } else {
+            setNeedsNickname(true);
+          }
         } else {
-          setNeedsNickname(true);
+          setUser(null);
+          setProfile(null);
+          setNeedsNickname(false);
         }
-      } else {
-        setUser(null);
-        setProfile(null);
-        setNeedsNickname(false);
+      } catch (error) {
+        console.error('Auth state change error:', error);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     });
 
     return () => {
