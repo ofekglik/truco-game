@@ -1,0 +1,14 @@
+{
+  "name": "truco-game",
+  "version": "1.0.0",
+  "description": "Multiplayer Truco card game - 4 players via WebSocket",
+  "type": "module",
+  "engines": {
+    "node": "20.x"
+  },
+  "scripts": {
+    "build": "npm install --prefix client && npm run build --prefix client && npm install --prefix server && npm run build --prefix server",
+    "start": "node server/dist/server.mjs",
+    "dev": "cd server && npm run build && node dist/server.mjs"
+  }
+}

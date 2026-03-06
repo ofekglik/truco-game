@@ -1,0 +1,763 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>טרוקו - משחק קלפים ספרדי</title>
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;600;700;900&display=swap" rel="stylesheet">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'Heebo', sans-serif; background: #0a0a1a; color: white; overflow: hidden; height: 100vh; width: 100vw; }
+
+/* === LOBBY === */
+.lobby { display: flex; align-items: center; justify-content: center; height: 100vh; background: linear-gradient(to bottom, #0a0a1a, #1a1a2e); }
+.lobby-box { background: #16213e; border: 1px solid #2a3a5e; border-radius: 1rem; padding: 2rem; width: 100%; max-width: 420px; box-shadow: 0 25px 50px rgba(0,0,0,0.5); }
+.lobby-box h1 { text-align: center; font-size: 2.5rem; color: #facc15; margin-bottom: 0.25rem; }
+.lobby-box .sub { text-align: center; color: #9ca3af; font-size: 0.875rem; margin-bottom: 2rem; }
+.lobby-box input { width: 100%; padding: 0.75rem; border-radius: 0.5rem; background: #0a0a1a; border: 1px solid #2a3a5e; color: white; font-size: 1rem; font-family: 'Heebo'; margin-bottom: 0.75rem; outline: none; }
+.lobby-box input:focus { border-color: #facc15; }
+.lobby-box input::placeholder { color: #6b7280; }
+.btn { width: 100%; padding: 0.875rem; border-radius: 0.75rem; font-weight: 700; font-size: 1.1rem; cursor: pointer; border: none; font-family: 'Heebo'; transition: all 0.2s; }
+.btn:disabled { background: #374151; color: #6b7280; cursor: default; }
+.btn-gold { background: #ca8a04; color: black; }
+.btn-gold:hover:not(:disabled) { background: #eab308; }
+.btn-green { background: #16a34a; color: white; }
+.btn-green:hover:not(:disabled) { background: #22c55e; }
+.btn-gray { background: #374151; color: #d1d5db; border: 1px solid #4b5563; }
+.btn-gray:hover:not(:disabled) { background: #4b5563; }
+.btn-red { background: #b91c1c; color: white; }
+.btn-red:hover:not(:disabled) { background: #dc2626; }
+.btn-sm { padding: 0.5rem 1rem; font-size: 0.875rem; width: auto; border-radius: 0.5rem; }
+.players-grid { display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 1.5rem; }
+.player-slot { display: flex; align-items: center; justify-content: space-between; padding: 0.75rem; border-radius: 0.5rem; }
+.player-slot.filled { background: #1a2a4e; }
+.player-slot.empty { background: #0a0a1a; border: 1px dashed #2a3a5e; }
+.player-slot.me { box-shadow: inset 0 0 0 1px #facc15; }
+.team-badge { font-size: 0.7rem; padding: 0.1rem 0.4rem; border-radius: 0.25rem; }
+.team1 { color: #60a5fa; background: rgba(59,130,246,0.15); }
+.team2 { color: #f87171; background: rgba(239,68,68,0.15); }
+
+/* === TABLE === */
+.table-wrap { width: 100vw; height: 100vh; position: relative; overflow: hidden; background: #0d1b0e; }
+.felt { position: absolute; inset: 2rem; border-radius: 3rem; background: linear-gradient(135deg, #1a5c2a, #0f3d1a); border: 12px solid #3a2010; box-shadow: inset 0 0 60px rgba(0,0,0,0.4); }
+.felt-inner { position: absolute; inset: 0.5rem; border-radius: 2.5rem; border: 1px solid rgba(42,106,58,0.3); }
+
+/* Top bar */
+.top-bar { position: absolute; top: 0.75rem; left: 50%; transform: translateX(-50%); z-index: 20; }
+.msg-pill { padding: 0.5rem 1.25rem; border-radius: 99px; font-size: 0.875rem; font-weight: 600; backdrop-filter: blur(8px); white-space: nowrap; }
+.msg-pill.my-turn { background: rgba(202,138,4,0.8); color: black; }
+.msg-pill.not-my-turn { background: rgba(0,0,0,0.6); color: #e5e7eb; }
+
+.info-tl { position: absolute; top: 0.75rem; left: 1rem; z-index: 20; background: rgba(0,0,0,0.6); backdrop-filter: blur(8px); border-radius: 0.5rem; padding: 0.375rem 0.75rem; font-size: 0.8rem; cursor: pointer; }
+.info-tr { position: absolute; top: 0.75rem; right: 1rem; z-index: 20; background: rgba(0,0,0,0.6); backdrop-filter: blur(8px); border-radius: 0.5rem; padding: 0.375rem 0.75rem; font-size: 0.8rem; }
+.cantes-bar { position: absolute; top: 2.75rem; left: 50%; transform: translateX(-50%); z-index: 20; display: flex; gap: 0.5rem; }
+.cante-badge { background: rgba(0,0,0,0.6); backdrop-filter: blur(8px); border-radius: 0.5rem; padding: 0.25rem 0.5rem; font-size: 0.75rem; }
+
+/* Center info */
+.center-info { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; z-index: 5; }
+.trump-badge { background: rgba(0,0,0,0.5); border-radius: 0.75rem; padding: 0.5rem 1rem; backdrop-filter: blur(4px); margin-bottom: 0.5rem; display: inline-block; }
+.trump-label { color: #9ca3af; font-size: 0.7rem; }
+.bid-badge { background: rgba(0,0,0,0.5); border-radius: 0.5rem; padding: 0.25rem 0.75rem; backdrop-filter: blur(4px); display: inline-block; }
+
+/* Players around table */
+.other-player { position: absolute; display: flex; flex-direction: column; align-items: center; z-index: 10; }
+.other-player.pos-top { top: 2rem; left: 50%; transform: translateX(-50%); }
+.other-player.pos-left { left: 2rem; top: 50%; transform: translateY(-50%); }
+.other-player.pos-right { right: 2rem; top: 50%; transform: translateY(-50%); }
+.player-label { padding: 0.25rem 0.75rem; border-radius: 0.5rem; font-size: 0.8rem; font-weight: 600; margin-bottom: 0.5rem; border: 2px solid; }
+.player-label.active { background: rgba(202,138,4,0.3); border-color: #facc15; color: #fde047; }
+.player-label.inactive { background: rgba(26,42,78,0.8); border-color: #3b82f6; color: #d1d5db; }
+.player-label.inactive.t2 { border-color: #ef4444; }
+.card-backs { display: flex; gap: -0.25rem; }
+.card-backs.vertical { flex-direction: column; }
+
+/* Card back */
+.card-back { width: 2.5rem; height: 3.5rem; background: linear-gradient(135deg, #7f1d1d, #991b1b); border: 2px solid #4b5563; border-radius: 0.375rem; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 6px rgba(0,0,0,0.3); flex-shrink: 0; }
+.card-back-inner { width: 1.5rem; height: 2.25rem; border: 1px solid #92400e; border-radius: 0.2rem; background: linear-gradient(135deg, #991b1b, #7f1d1d); display: flex; align-items: center; justify-content: center; color: #92400e; font-size: 0.6rem; }
+.card-backs:not(.vertical) .card-back + .card-back { margin-right: -1rem; }
+.card-backs.vertical .card-back + .card-back { margin-top: -2rem; }
+
+/* Trick area */
+.trick-area { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 16rem; height: 12rem; z-index: 10; }
+.trick-card { position: absolute; }
+.trick-card.pos-bottom { bottom: 0; left: 50%; transform: translateX(-50%); }
+.trick-card.pos-top { top: 0; left: 50%; transform: translateX(-50%); }
+.trick-card.pos-left { left: 0; top: 50%; transform: translateY(-50%); }
+.trick-card.pos-right { right: 0; top: 50%; transform: translateY(-50%); }
+
+/* Playing cards */
+.card { position: relative; width: 4.5rem; height: 6.5rem; background: white; border: 2px solid #d1d5db; border-radius: 0.5rem; color: black; font-family: serif; box-shadow: 0 4px 12px rgba(0,0,0,0.3); user-select: none; flex-shrink: 0; }
+.card.small { width: 3.25rem; height: 4.75rem; }
+.card.playable { border-color: #facc15; cursor: pointer; transition: transform 0.2s; }
+.card.playable:hover { transform: translateY(-1rem); box-shadow: 0 8px 20px rgba(0,0,0,0.4); }
+.card.dimmed { opacity: 0.6; }
+.card-tl { position: absolute; top: 0.2rem; right: 0.35rem; display: flex; flex-direction: column; align-items: center; line-height: 1; }
+.card-br { position: absolute; bottom: 0.2rem; left: 0.35rem; display: flex; flex-direction: column; align-items: center; line-height: 1; transform: rotate(180deg); }
+.card-rank { font-weight: 700; font-size: 0.85rem; }
+.card-pip { font-size: 0.7rem; }
+.card.small .card-rank { font-size: 0.65rem; }
+.card.small .card-pip { font-size: 0.55rem; }
+.card-center { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+.card-center .special { text-align: center; }
+.card-center .special .icon { font-size: 1.6rem; }
+.card.small .card-center .special .icon { font-size: 1.1rem; }
+.card-center .special .label { font-size: 0.45rem; color: #6b7280; }
+.card-center .pips-grid { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.15rem; padding: 0.5rem; max-width: 3rem; }
+.card.small .card-center .pips-grid { max-width: 2.2rem; padding: 0.25rem; }
+.card-center .pips-grid .pip-dot { font-size: 0.6rem; }
+.card.small .card-center .pips-grid .pip-dot { font-size: 0.45rem; }
+
+/* My hand */
+.my-hand-area { position: absolute; bottom: 0.75rem; left: 50%; transform: translateX(-50%); z-index: 20; display: flex; align-items: flex-end; }
+.my-hand-area .card + .card { margin-right: -0.75rem; }
+.my-label { position: absolute; bottom: 7.5rem; left: 50%; transform: translateX(-50%); z-index: 20; }
+
+/* Panels */
+.panel-overlay { position: absolute; bottom: 10rem; left: 50%; transform: translateX(-50%); z-index: 30; background: rgba(22,33,62,0.95); border: 1px solid #4a5a7e; border-radius: 0.75rem; padding: 1.25rem; box-shadow: 0 20px 40px rgba(0,0,0,0.5); backdrop-filter: blur(8px); min-width: 280px; }
+.panel-overlay h3 { text-align: center; color: #facc15; font-weight: 700; margin-bottom: 0.75rem; }
+.bid-controls { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.75rem; direction: ltr; justify-content: center; }
+.bid-btn { width: 2.5rem; height: 2.5rem; border-radius: 0.5rem; background: #2a3a5e; color: white; border: none; font-size: 1.25rem; font-weight: 700; cursor: pointer; }
+.bid-btn:hover { background: #3a4a6e; }
+.bid-input { width: 5rem; height: 2.5rem; text-align: center; font-size: 1.5rem; font-weight: 700; background: #0a0a1a; color: #facc15; border: 1px solid #4a5a7e; border-radius: 0.5rem; font-family: 'Heebo'; }
+.bid-actions { display: flex; gap: 0.5rem; }
+.suit-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
+.suit-btn { padding: 0.75rem; border-radius: 0.5rem; font-weight: 700; font-size: 1rem; cursor: pointer; border: 2px solid; background: transparent; font-family: 'Heebo'; transition: all 0.2s; }
+.suit-btn:hover { transform: scale(1.05); }
+.sing-btn { width: 100%; padding: 0.625rem; border-radius: 0.5rem; font-weight: 700; cursor: pointer; border: 2px solid; background: transparent; font-family: 'Heebo'; margin-bottom: 0.5rem; transition: all 0.2s; }
+.sing-btn:hover { transform: scale(1.02); }
+
+/* Round scoring overlay */
+.scoring-overlay { position: absolute; inset: 0; z-index: 40; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; backdrop-filter: blur(4px); }
+.scoring-box { background: #16213e; border: 1px solid #4a5a7e; border-radius: 1rem; padding: 1.5rem; width: 100%; max-width: 380px; box-shadow: 0 25px 50px rgba(0,0,0,0.5); }
+.scoring-box h3 { text-align: center; color: #facc15; font-size: 1.5rem; font-weight: 700; margin-bottom: 1rem; }
+.score-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem; }
+.score-card { border-radius: 0.5rem; padding: 0.75rem; text-align: center; }
+.score-card.t1 { background: rgba(59,130,246,0.15); border: 1px solid #1d4ed8; }
+.score-card.t2 { background: rgba(239,68,68,0.15); border: 1px solid #b91c1c; }
+.score-card .label { font-size: 0.8rem; margin-bottom: 0.25rem; }
+.score-card .label.t1 { color: #60a5fa; }
+.score-card .label.t2 { color: #f87171; }
+.score-card .big { font-size: 1.75rem; font-weight: 700; }
+.score-card .detail { font-size: 0.7rem; color: #9ca3af; }
+.fell-banner { background: rgba(185,28,28,0.3); border: 1px solid #b91c1c; border-radius: 0.5rem; padding: 0.5rem; text-align: center; margin-bottom: 1rem; }
+.fell-banner p { color: #fca5a5; font-weight: 700; }
+.cumulative { background: #0a0a1a; border-radius: 0.5rem; padding: 0.75rem; margin-bottom: 1rem; }
+.cumulative .label { text-align: center; color: #9ca3af; font-size: 0.8rem; margin-bottom: 0.5rem; }
+.cumulative .row { display: flex; justify-content: space-around; align-items: center; }
+.cumulative .col { text-align: center; }
+.cumulative .col .num { font-size: 1.25rem; font-weight: 700; }
+
+/* Scoreboard overlay */
+.sb-overlay { position: absolute; inset: 0; z-index: 50; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; }
+.sb-box { background: #16213e; border: 1px solid #4a5a7e; border-radius: 1rem; padding: 1.5rem; width: 100%; max-width: 400px; }
+.sb-box h3 { color: #facc15; font-size: 1.25rem; font-weight: 700; }
+.sb-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+.sb-close { background: none; border: none; color: #9ca3af; font-size: 1.25rem; cursor: pointer; }
+.sb-close:hover { color: white; }
+.sb-history { max-height: 12rem; overflow-y: auto; }
+.sb-round { display: flex; align-items: center; justify-content: space-between; background: #0a0a1a; border-radius: 0.5rem; padding: 0.5rem 0.75rem; font-size: 0.8rem; margin-bottom: 0.25rem; }
+.sb-round .rnum { color: #6b7280; }
+.sb-round .fell { color: #ef4444; text-decoration: line-through; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+// ======= GAME ENGINE =======
+const Suit = { OROS: 'oros', COPAS: 'copas', ESPADAS: 'espadas', BASTOS: 'bastos' };
+const SUITS = [Suit.OROS, Suit.COPAS, Suit.ESPADAS, Suit.BASTOS];
+const SUIT_HE = { oros: 'זהב', copas: 'כוסות', espadas: 'חרבות', bastos: 'מקלות' };
+const SUIT_SYM = { oros: '🪙', copas: '🏆', espadas: '⚔️', bastos: '🪵' };
+const SUIT_COL = { oros: '#FFD700', copas: '#DC2626', espadas: '#3B82F6', bastos: '#22C55E' };
+const SUIT_PIP = { oros: '●', copas: '♥', espadas: '♠', bastos: '♣' };
+const RANKS = [1,2,3,4,5,6,7,10,11,12];
+const CARD_PTS = {1:11,2:0,3:10,4:0,5:0,6:0,7:0,10:2,11:3,12:4};
+const CARD_PWR = {2:0,4:1,5:2,6:3,7:4,10:5,11:6,12:7,3:8,1:9};
+const RANK_HE = {1:'אס',2:'2',3:'3',4:'4',5:'5',6:'6',7:'7',10:'סוטה',11:'סוס',12:'מלך'};
+const RANK_DISP = {1:'A',2:'2',3:'3',4:'4',5:'5',6:'6',7:'7',10:'J',11:'C',12:'K'};
+const SEAT_ORDER = ['south','east','north','west'];
+const SEAT_HE = { south:'דרום', east:'מזרח', north:'צפון', west:'מערב' };
+const SEAT_TEAM = { south:'team1', north:'team1', east:'team2', west:'team2' };
+const Phase = { WAITING:'waiting', BIDDING:'bidding', TRUMP:'trump', SINGING:'singing', TRICK:'trick', SCORING:'scoring' };
+
+function createDeck() {
+  const d = [];
+  for (const s of SUITS) for (const r of RANKS) d.push({ suit:s, rank:r, id:`${s}-${r}` });
+  return d;
+}
+function shuffle(arr) {
+  const a = [...arr];
+  for (let i = a.length-1; i > 0; i--) { const j = Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; }
+  return a;
+}
+function nextSeat(s) { return SEAT_ORDER[(SEAT_ORDER.indexOf(s)+1)%4]; }
+function teamOf(s) { return SEAT_TEAM[s]; }
+
+function beats(ch, cur, lead, trump) {
+  const ct = trump && ch.suit===trump, ct2 = trump && cur.suit===trump;
+  if (ct && !ct2) return true;
+  if (!ct && ct2) return false;
+  if (ct && ct2) return CARD_PWR[ch.rank] > CARD_PWR[cur.rank];
+  if (ch.suit===lead && cur.suit!==lead) return true;
+  if (ch.suit!==lead && cur.suit===lead) return false;
+  if (ch.suit===cur.suit) return CARD_PWR[ch.rank] > CARD_PWR[cur.rank];
+  return false;
+}
+
+function trickWinner(trick, trump) {
+  const lead = trick[0].card.suit;
+  let w = trick[0];
+  for (let i=1;i<trick.length;i++) if (beats(trick[i].card, w.card, lead, trump)) w = trick[i];
+  return w;
+}
+
+function trickPoints(trick) { return trick.reduce((s,tc) => s + CARD_PTS[tc.card.rank], 0); }
+
+function getValidPlays(hand, trick, trump) {
+  if (trick.length===0) return [...hand];
+  const lead = trick[0].card.suit;
+  const ofLead = hand.filter(c=>c.suit===lead);
+  if (ofLead.length>0) {
+    const highest = Math.max(...trick.filter(tc=>tc.card.suit===lead).map(tc=>CARD_PWR[tc.card.rank]));
+    const higher = ofLead.filter(c=>CARD_PWR[c.rank]>highest);
+    return higher.length>0 ? higher : ofLead;
+  }
+  if (trump) {
+    const trumps = hand.filter(c=>c.suit===trump);
+    if (trumps.length>0) {
+      const trumpInTrick = trick.filter(tc=>tc.card.suit===trump);
+      if (trumpInTrick.length>0) {
+        const ht = Math.max(...trumpInTrick.map(tc=>CARD_PWR[tc.card.rank]));
+        const higherT = trumps.filter(c=>CARD_PWR[c.rank]>ht);
+        if (higherT.length>0) return higherT;
+        return [...hand]; // Rule 4
+      }
+      return trumps;
+    }
+  }
+  return [...hand];
+}
+
+function canSingCante(hand, suit) {
+  return hand.some(c=>c.suit===suit&&c.rank===11) && hand.some(c=>c.suit===suit&&c.rank===12);
+}
+
+function getSingable(hand, trump, bidAmt, existingCantes, seat, biddingTeam) {
+  if (teamOf(seat)!==biddingTeam || bidAmt<80) return [];
+  const existing = existingCantes.filter(c=>teamOf(c.seat)===biddingTeam).reduce((s,c)=>s+c.points,0);
+  const res = [];
+  for (const suit of SUITS) {
+    if (!canSingCante(hand, suit)) continue;
+    if (existingCantes.some(c=>c.seat===seat&&c.suit===suit)) continue;
+    const isTrump = suit===trump;
+    const pts = isTrump ? 40 : 20;
+    if (bidAmt===80 && isTrump) continue;
+    if (bidAmt>=90 && bidAmt<100 && existing+pts>40) continue;
+    res.push(suit);
+  }
+  return res;
+}
+
+// ======= GAME STATE =======
+function newGame(names) {
+  return {
+    phase: Phase.WAITING,
+    names, // {south:'..', east:'..', north:'..', west:'..'}
+    hands: {south:[],east:[],north:[],west:[]},
+    dealer: 'south',
+    turn: 'east',
+    bids: [],
+    bidAmt: 0,
+    bidWinner: null,
+    biddingTeam: null,
+    trump: null,
+    capoType: 'none', // none, technical, bid
+    capoDeclarer: null,
+    cantes: [],
+    singingDone: false,
+    currentTrick: [],
+    trickLead: 'east',
+    completedTricks: [],
+    trickNum: 0,
+    tricksWon: {team1:0, team2:0},
+    scores: {team1:0, team2:0},
+    roundHistory: [],
+    roundNum: 0,
+    msg: 'ממתינים...',
+    viewingSeat: 'south', // who is currently playing (pass-and-play)
+    passAndPlayPrompt: false,
+  };
+}
+
+function startRound(G) {
+  const deck = shuffle(createDeck());
+  G.hands = { south:deck.slice(0,10), east:deck.slice(10,20), north:deck.slice(20,30), west:deck.slice(30,40) };
+  const first = nextSeat(G.dealer);
+  G.bids=[]; G.bidAmt=0; G.bidWinner=null; G.biddingTeam=null;
+  G.trump=null; G.capoType='none'; G.capoDeclarer=null;
+  G.cantes=[]; G.singingDone=false;
+  G.currentTrick=[]; G.trickLead=first;
+  G.completedTricks=[]; G.trickNum=0;
+  G.tricksWon={team1:0,team2:0};
+  G.roundNum++;
+
+  // Check technical capo
+  for (const seat of SEAT_ORDER) {
+    const h = G.hands[seat];
+    if (h.filter(c=>c.rank===12).length===4) {
+      G.capoType='technical'; G.capoDeclarer=seat;
+      G.biddingTeam=teamOf(seat); G.bidAmt=230;
+      G.phase=Phase.TRUMP; G.turn=seat;
+      G.msg=`${G.names[seat]} מכריז קאפו טכני! (4 מלכים)`;
+      G.viewingSeat=seat; G.passAndPlayPrompt=false;
+      return;
+    }
+    if (h.filter(c=>c.rank===11).length===4) {
+      G.capoType='technical'; G.capoDeclarer=seat;
+      G.biddingTeam=teamOf(seat); G.bidAmt=230;
+      G.phase=Phase.TRUMP; G.turn=seat;
+      G.msg=`${G.names[seat]} מכריז קאפו טכני! (4 סוסים)`;
+      G.viewingSeat=seat; G.passAndPlayPrompt=false;
+      return;
+    }
+  }
+
+  G.phase=Phase.BIDDING; G.turn=first;
+  G.msg=`תור ${G.names[first]} להציע`;
+  G.viewingSeat=first; G.passAndPlayPrompt=false;
+}
+
+function doBid(G, amount) {
+  if (G.phase!==Phase.BIDDING || G.turn!==G.viewingSeat) return;
+  G.bids.push({seat:G.turn, amount});
+  if (amount>0) {
+    G.bidAmt=amount; G.bidWinner=G.turn;
+    if (amount===230) {
+      G.capoType='bid'; G.capoDeclarer=G.turn;
+      G.biddingTeam=teamOf(G.turn);
+      G.phase=Phase.TRUMP; G.msg=`${G.names[G.turn]} הכריז קאפו!`;
+      G.viewingSeat=G.turn; G.passAndPlayPrompt=false;
+      return;
+    }
+  }
+  // Find next
+  let next=nextSeat(G.turn), count=0;
+  while(count<4) {
+    const passed=G.bids.some(b=>b.seat===next&&b.amount===0);
+    if (!passed && next!==G.bidWinner) { G.turn=next; G.msg=`תור ${G.names[next]} להציע`; G.passAndPlayPrompt=true; return; }
+    next=nextSeat(next); count++;
+  }
+  if (G.bidWinner) {
+    G.biddingTeam=teamOf(G.bidWinner);
+    G.phase=Phase.TRUMP; G.turn=G.bidWinner;
+    G.msg=`${G.names[G.bidWinner]} זכה (${G.bidAmt}). בחר אטו.`;
+    G.viewingSeat=G.bidWinner; G.passAndPlayPrompt=true;
+  } else {
+    G.dealer=nextSeat(G.dealer);
+    G.msg='כולם עברו. ערבוב מחדש...';
+    setTimeout(()=>{ startRound(G); render(); }, 1500);
+  }
+}
+
+function doTrump(G, suit) {
+  if (G.phase!==Phase.TRUMP) return;
+  G.trump=suit;
+  if (G.bidAmt>=80 || G.capoType!=='none') {
+    G.phase=Phase.SINGING;
+    // Find first singing team member
+    let s=nextSeat(G.dealer);
+    for(let i=0;i<4;i++){if(teamOf(s)===G.biddingTeam)break;s=nextSeat(s);}
+    G.turn=s;
+    if(!checkAnySinging(G)){G.singingDone=true;startTricks(G);}
+    else{G.msg=`אטו: ${SUIT_HE[suit]}. שלב שירה.`;G.viewingSeat=G.turn;G.passAndPlayPrompt=true;}
+  } else startTricks(G);
+}
+
+function checkAnySinging(G) {
+  for(const s of SEAT_ORDER){
+    if(teamOf(s)!==G.biddingTeam)continue;
+    if(getSingable(G.hands[s],G.trump,G.bidAmt,G.cantes,s,G.biddingTeam).length>0)return true;
+  }
+  return false;
+}
+
+function doSing(G, suit) {
+  if(G.phase!==Phase.SINGING)return;
+  const s=G.turn||G.viewingSeat;
+  const isTrump=suit===G.trump;
+  G.cantes.push({suit,isTrump,points:isTrump?40:20,seat:s});
+  G.msg=`${G.names[s]} שר ${SUIT_HE[suit]}${isTrump?' (אטו)':''} — ${isTrump?40:20} נקודות`;
+}
+
+function doDoneSinging(G) {
+  if(G.phase!==Phase.SINGING)return;
+  let next=nextSeat(G.turn);
+  for(let i=0;i<3;i++){
+    if(teamOf(next)===G.biddingTeam && next!==G.turn){
+      if(getSingable(G.hands[next],G.trump,G.bidAmt,G.cantes,next,G.biddingTeam).length>0){
+        G.turn=next; G.viewingSeat=next; G.passAndPlayPrompt=true; return;
+      }
+    }
+    next=nextSeat(next);
+  }
+  G.singingDone=true; startTricks(G);
+}
+
+function startTricks(G) {
+  G.phase=Phase.TRICK; G.trickNum=1;
+  const first=nextSeat(G.dealer);
+  G.turn=first; G.trickLead=first;
+  G.currentTrick=[];
+  G.msg=`שלב לקיחה. תור ${G.names[first]}`;
+  G.viewingSeat=first; G.passAndPlayPrompt=true;
+}
+
+function doPlay(G, cardId) {
+  if(G.phase!==Phase.TRICK||G.turn!==G.viewingSeat)return;
+  const hand=G.hands[G.turn];
+  const idx=hand.findIndex(c=>c.id===cardId);
+  if(idx===-1)return;
+  const valid=getValidPlays(hand,G.currentTrick,G.trump);
+  if(!valid.some(c=>c.id===cardId))return;
+  const card=hand.splice(idx,1)[0];
+  G.currentTrick.push({card,seat:G.turn});
+
+  if(G.currentTrick.length===4){
+    const winner=trickWinner(G.currentTrick,G.trump);
+    G.completedTricks.push([...G.currentTrick]);
+    G.tricksWon[teamOf(winner.seat)]++;
+    G.msg=`${G.names[winner.seat]} לקח את הלקיחה`;
+
+    if(G.capoType==='technical'&&G.completedTricks.length===1){ endRound(G); return; }
+    if(G.capoType==='bid'){
+      const other=G.biddingTeam==='team1'?'team2':'team1';
+      if(G.tricksWon[other]>0){ endRound(G); return; }
+    }
+    if(G.completedTricks.length===10){ endRound(G); return; }
+
+    G.trickNum++; G.turn=winner.seat; G.trickLead=winner.seat;
+    G.currentTrick=[];
+    G.msg=`תור ${G.names[winner.seat]}`;
+    G.viewingSeat=winner.seat; G.passAndPlayPrompt=true;
+  } else {
+    G.turn=nextSeat(G.turn);
+    G.msg=`תור ${G.names[G.turn]}`;
+    G.viewingSeat=G.turn; G.passAndPlayPrompt=true;
+  }
+}
+
+function endRound(G) {
+  G.phase=Phase.SCORING;
+  const singPts={team1:0,team2:0};
+  for(const c of G.cantes) singPts[teamOf(c.seat)]+=c.points;
+  let t1=0,t2=0;
+
+  if(G.capoType==='technical'){
+    const w=G.completedTricks[0]?trickWinner(G.completedTricks[0],G.trump):null;
+    if(w&&teamOf(w.seat)===G.biddingTeam){
+      if(G.biddingTeam==='team1'){t1=230;t2=0;}else{t2=230;t1=0;}
+    }else{
+      if(G.biddingTeam==='team1')t1=0;else t2=0;
+    }
+    const fell=!w||teamOf(w.seat)!==G.biddingTeam;
+    const rs={t1Trick:t1,t2Trick:t2,t1Sing:0,t2Sing:0,t1Total:t1,t2Total:t2,bidTeam:G.biddingTeam,bidAmt:230,fell};
+    G.scores.team1+=t1; G.scores.team2+=t2;
+    G.roundHistory.push(rs);
+    G.msg=fell?'קאפו טכני נכשל!':'קאפו טכני הצליח! 230 נקודות!';
+    return;
+  }
+
+  for(let i=0;i<G.completedTricks.length;i++){
+    const w=trickWinner(G.completedTricks[i],G.trump);
+    let pts=trickPoints(G.completedTricks[i]);
+    if(i===G.completedTricks.length-1&&G.completedTricks.length===10) pts+=10;
+    if(teamOf(w.seat)==='team1')t1+=pts;else t2+=pts;
+  }
+
+  if(G.capoType==='bid'){
+    const other=G.biddingTeam==='team1'?'team2':'team1';
+    if(G.tricksWon[other]===0){
+      if(G.biddingTeam==='team1'){t1=230;t2=0;}else{t2=230;t1=0;}
+    }else{
+      if(G.biddingTeam==='team1')t1=0;else t2=0;
+    }
+    const fell=G.tricksWon[other]>0;
+    const rs={t1Trick:t1,t2Trick:t2,t1Sing:0,t2Sing:0,t1Total:t1,t2Total:t2,bidTeam:G.biddingTeam,bidAmt:230,fell};
+    G.scores.team1+=t1; G.scores.team2+=t2;
+    G.roundHistory.push(rs);
+    G.msg=fell?'קאפו נכשל!':'קאפו הצליח! 230 נקודות!';
+    return;
+  }
+
+  const tot1=t1+singPts.team1, tot2=t2+singPts.team2;
+  const bidTotal=G.biddingTeam==='team1'?tot1:tot2;
+  const fell=bidTotal<G.bidAmt;
+  let f1=tot1,f2=tot2;
+  if(fell){if(G.biddingTeam==='team1')f1=0;else f2=0;}
+  const rs={t1Trick:t1,t2Trick:t2,t1Sing:singPts.team1,t2Sing:singPts.team2,t1Total:f1,t2Total:f2,bidTeam:G.biddingTeam,bidAmt:G.bidAmt,fell};
+  G.scores.team1+=f1; G.scores.team2+=f2;
+  G.roundHistory.push(rs);
+  G.msg=fell?`הקבוצה המציעה נפלה! (${bidTotal}/${G.bidAmt})`:`סיום סיבוב. קבוצה 1: ${f1}, קבוצה 2: ${f2}`;
+}
+
+// ======= RENDERER =======
+let G = null;
+let showScoreboard = false;
+let setupNames = {south:'',east:'',north:'',west:''};
+let bidInput = 70;
+
+function render() {
+  const app = document.getElementById('app');
+  if (!G) { app.innerHTML = renderSetup(); return; }
+  if (G.passAndPlayPrompt && G.phase !== Phase.SCORING && G.phase !== Phase.WAITING) {
+    app.innerHTML = renderPassPrompt();
+    return;
+  }
+  if (G.phase === Phase.WAITING) { app.innerHTML = renderSetup(); return; }
+  app.innerHTML = renderTable();
+}
+
+function renderSetup() {
+  return `
+  <div class="lobby">
+    <div class="lobby-box">
+      <h1>🃏 טרוקו</h1>
+      <p class="sub">משחק קלפים ספרדי — 4 שחקנים</p>
+      <div style="margin-bottom:0.5rem;color:#9ca3af;font-size:0.8rem;">שמות השחקנים:</div>
+      <div class="players-grid">
+        ${SEAT_ORDER.map(s => `
+          <div class="player-slot filled" style="gap:0.5rem">
+            <span class="team-badge ${SEAT_TEAM[s]==='team1'?'team1':'team2'}">${SEAT_TEAM[s]==='team1'?'קבוצה 1':'קבוצה 2'}</span>
+            <span style="color:#6b7280;font-size:0.75rem">(${SEAT_HE[s]})</span>
+            <input value="${setupNames[s]}" oninput="setupNames['${s}']=this.value" placeholder="שם שחקן..."
+              style="flex:1;padding:0.5rem;border-radius:0.375rem;background:#0a0a1a;border:1px solid #2a3a5e;color:white;font-family:'Heebo';font-size:0.9rem;outline:none;">
+          </div>
+        `).join('')}
+      </div>
+      <button class="btn btn-gold" onclick="startSetup()" ${Object.values(setupNames).every(n=>n.trim())?'':'disabled'}>התחל משחק!</button>
+    </div>
+  </div>`;
+}
+
+function renderPassPrompt() {
+  return `
+  <div class="lobby">
+    <div class="lobby-box" style="text-align:center">
+      <div style="font-size:3rem;margin-bottom:1rem">🃏</div>
+      <h2 style="color:#facc15;margin-bottom:0.5rem">תור ${G.names[G.viewingSeat]}</h2>
+      <p style="color:#9ca3af;margin-bottom:0.25rem;font-size:0.9rem">${SEAT_HE[G.viewingSeat]} — ${SEAT_TEAM[G.viewingSeat]==='team1'?'קבוצה 1':'קבוצה 2'}</p>
+      <p style="color:#6b7280;margin-bottom:1.5rem;font-size:0.8rem">העבירו את המכשיר לשחקן זה</p>
+      <button class="btn btn-gold" onclick="G.passAndPlayPrompt=false;render()">אני מוכן!</button>
+    </div>
+  </div>`;
+}
+
+function relPos(my, target) {
+  const mi=SEAT_ORDER.indexOf(my), ti=SEAT_ORDER.indexOf(target);
+  return ['bottom','left','top','right'][(ti-mi+4)%4];
+}
+
+function renderCard(card, playable, small) {
+  const col=SUIT_COL[card.suit], pip=SUIT_PIP[card.suit], sym=SUIT_SYM[card.suit];
+  const isSpec=card.rank>=10;
+  const cls=`card${small?' small':''}${playable?' playable':''}${!playable&&!small?' dimmed':''}`;
+  const click=playable?`onclick="doPlay(G,'${card.id}');render()"`:'';
+  const center=isSpec?
+    `<div class="special"><div class="icon">${sym}</div><div class="label">${RANK_HE[card.rank]}</div></div>`:
+    `<div class="pips-grid">${Array(card.rank).fill(`<span class="pip-dot" style="color:${col}">${pip}</span>`).join('')}</div>`;
+  return `<div class="${cls}" ${click}>
+    <div class="card-tl"><span class="card-rank" style="color:${col}">${RANK_DISP[card.rank]}</span><span class="card-pip" style="color:${col}">${pip}</span></div>
+    <div class="card-center">${center}</div>
+    <div class="card-br"><span class="card-rank" style="color:${col}">${RANK_DISP[card.rank]}</span><span class="card-pip" style="color:${col}">${pip}</span></div>
+  </div>`;
+}
+
+function renderCardBack() {
+  return `<div class="card-back"><div class="card-back-inner">✦</div></div>`;
+}
+
+function renderTable() {
+  const me=G.viewingSeat;
+  const isMyTurn=G.turn===me;
+  const hand=[...G.hands[me]].sort((a,b)=>a.suit.localeCompare(b.suit)||a.rank-b.rank);
+  const validIds=G.phase===Phase.TRICK&&isMyTurn?getValidPlays(hand,G.currentTrick,G.trump).map(c=>c.id):[];
+
+  // Other players
+  const others=['left','top','right'].map(pos=>{
+    const off={left:1,top:2,right:3}[pos];
+    const seat=SEAT_ORDER[(SEAT_ORDER.indexOf(me)+off)%4];
+    const name=G.names[seat];
+    const count=G.hands[seat].length;
+    const active=G.turn===seat;
+    const t2=teamOf(seat)==='team2'?'t2':'';
+    return `<div class="other-player pos-${pos}">
+      <div class="player-label ${active?'active':'inactive '+t2}">${name}</div>
+      <div class="card-backs ${pos==='left'||pos==='right'?'vertical':''}">${Array(Math.min(count,10)).fill(renderCardBack()).join('')}</div>
+    </div>`;
+  }).join('');
+
+  // Trick cards
+  const trickCards=G.currentTrick.map(tc=>{
+    const pos=relPos(me,tc.seat);
+    return `<div class="trick-card pos-${pos}">${renderCard(tc.card,false,true)}</div>`;
+  }).join('');
+
+  // Panels
+  let panel='';
+  if(G.phase===Phase.BIDDING&&isMyTurn){
+    const minB=Math.max(70,G.bidAmt+1);
+    panel=`<div class="panel-overlay">
+      <h3>הצעה שלך</h3>
+      <div class="bid-controls">
+        <button class="bid-btn" onclick="bidInput=Math.max(${minB},bidInput-5);render()">−</button>
+        <input class="bid-input" type="number" value="${bidInput}" min="${minB}" max="229"
+          oninput="bidInput=Math.max(${minB},Math.min(229,+this.value));render()">
+        <button class="bid-btn" onclick="bidInput=Math.min(229,bidInput+5);render()">+</button>
+      </div>
+      <div class="bid-actions">
+        <button class="btn btn-gold btn-sm" style="flex:1" onclick="doBid(G,bidInput);bidInput=Math.max(70,bidInput+1);render()">קנה (${bidInput})</button>
+        <button class="btn btn-red btn-sm" onclick="doBid(G,230);render()">קאפו!</button>
+        <button class="btn btn-gray btn-sm" style="flex:1" onclick="doBid(G,0);render()">עבור</button>
+      </div>
+    </div>`;
+  }
+  if(G.phase===Phase.TRUMP&&G.turn===me){
+    panel=`<div class="panel-overlay">
+      <h3>בחר אטו (חליפה שולטת)</h3>
+      <div class="suit-grid">${SUITS.map(s=>`
+        <button class="suit-btn" style="border-color:${SUIT_COL[s]};color:${SUIT_COL[s]}"
+          onclick="doTrump(G,'${s}');render()">${SUIT_SYM[s]} ${SUIT_HE[s]}</button>`).join('')}
+      </div>
+    </div>`;
+  }
+  if(G.phase===Phase.SINGING&&teamOf(me)===G.biddingTeam){
+    const singable=getSingable(G.hands[me],G.trump,G.bidAmt,G.cantes,me,G.biddingTeam);
+    if(singable.length>0||G.turn===me){
+      panel=`<div class="panel-overlay">
+        <h3>שירה</h3>
+        ${singable.map(s=>`<button class="sing-btn" style="border-color:${SUIT_COL[s]};color:${SUIT_COL[s]}"
+          onclick="doSing(G,'${s}');render()">שר ${SUIT_SYM[s]} ${SUIT_HE[s]} (${s===G.trump?40:20} נק׳)</button>`).join('')}
+        <button class="btn btn-gray" style="font-size:0.9rem;padding:0.5rem" onclick="doDoneSinging(G);render()">סיים שירה</button>
+      </div>`;
+    }
+  }
+
+  // Scoring overlay
+  let scoringHtml='';
+  if(G.phase===Phase.SCORING){
+    const r=G.roundHistory[G.roundHistory.length-1];
+    scoringHtml=`<div class="scoring-overlay">
+      <div class="scoring-box">
+        <h3>סיום סיבוב ${G.roundNum}</h3>
+        <div class="score-grid">
+          <div class="score-card t1"><div class="label t1">קבוצה 1</div><div class="big">${r.t1Total}</div><div class="detail">לקיחות: ${r.t1Trick} | שירה: ${r.t1Sing}</div></div>
+          <div class="score-card t2"><div class="label t2">קבוצה 2</div><div class="big">${r.t2Total}</div><div class="detail">לקיחות: ${r.t2Trick} | שירה: ${r.t2Sing}</div></div>
+        </div>
+        ${r.fell?'<div class="fell-banner"><p>הקבוצה המציעה נפלה! 💀</p></div>':''}
+        <div class="cumulative">
+          <div class="label">ניקוד מצטבר</div>
+          <div class="row">
+            <div class="col"><div style="color:#60a5fa;font-size:0.75rem">קבוצה 1</div><div class="num">${G.scores.team1}</div></div>
+            <div style="color:#facc15;font-size:1.25rem">—</div>
+            <div class="col"><div style="color:#f87171;font-size:0.75rem">קבוצה 2</div><div class="num">${G.scores.team2}</div></div>
+          </div>
+        </div>
+        <button class="btn btn-gold" onclick="G.dealer=nextSeat(G.dealer);startRound(G);render()">סיבוב הבא</button>
+      </div>
+    </div>`;
+  }
+
+  // Scoreboard overlay
+  let sbHtml='';
+  if(showScoreboard){
+    sbHtml=`<div class="sb-overlay" onclick="showScoreboard=false;render()">
+      <div class="sb-box" onclick="event.stopPropagation()">
+        <div class="sb-header"><h3>📊 לוח תוצאות</h3><button class="sb-close" onclick="showScoreboard=false;render()">✕</button></div>
+        <div class="score-grid" style="margin-bottom:1rem">
+          <div class="score-card t1"><div class="label t1">קבוצה 1</div><div class="big">${G.scores.team1}</div></div>
+          <div class="score-card t2"><div class="label t2">קבוצה 2</div><div class="big">${G.scores.team2}</div></div>
+        </div>
+        ${G.roundHistory.length?`<div style="color:#9ca3af;font-size:0.8rem;margin-bottom:0.5rem">היסטוריית סיבובים</div>
+        <div class="sb-history">${G.roundHistory.map((r,i)=>`
+          <div class="sb-round">
+            <span class="rnum">סיבוב ${i+1}</span>
+            <span>
+              <span style="color:${r.bidTeam==='team1'&&r.fell?'#ef4444':'#60a5fa'};font-weight:700;${r.bidTeam==='team1'&&r.fell?'text-decoration:line-through':''}">${r.t1Total}</span>
+              <span style="color:#4b5563"> - </span>
+              <span style="color:${r.bidTeam==='team2'&&r.fell?'#ef4444':'#f87171'};font-weight:700;${r.bidTeam==='team2'&&r.fell?'text-decoration:line-through':''}">${r.t2Total}</span>
+            </span>
+            <span style="color:#facc15;font-size:0.75rem">(${r.bidAmt})</span>
+          </div>`).join('')}</div>`:''}
+      </div>
+    </div>`;
+  }
+
+  // Cantes bar
+  const cantesHtml=G.cantes.length?`<div class="cantes-bar">${G.cantes.map(c=>
+    `<div class="cante-badge" style="color:${SUIT_COL[c.suit]}">${SUIT_SYM[c.suit]} ${c.points} נק׳</div>`).join('')}</div>`:'';
+
+  return `<div class="table-wrap">
+    <div class="felt"><div class="felt-inner"></div>
+      <div class="center-info">
+        ${G.trump?`<div class="trump-badge"><span class="trump-label">אטו: </span><span style="color:${SUIT_COL[G.trump]};font-size:1.1rem;font-weight:700">${SUIT_SYM[G.trump]} ${SUIT_HE[G.trump]}</span></div>`:''}
+        ${G.bidAmt>0?`<div class="bid-badge"><span style="color:#9ca3af;font-size:0.7rem">הצעה: </span><span style="color:#facc15;font-weight:700">${G.bidAmt}</span></div>`:''}
+      </div>
+      <div class="trick-area">${trickCards}</div>
+      ${others}
+    </div>
+    <div class="top-bar"><div class="msg-pill ${isMyTurn?'my-turn':'not-my-turn'}">${G.msg}${isMyTurn?' ◀ תורך!':''}</div></div>
+    <div class="info-tl" onclick="showScoreboard=true;render()">
+      <span style="color:#60a5fa;font-weight:700">${G.scores.team1}</span>
+      <span style="color:#6b7280;margin:0 0.25rem">-</span>
+      <span style="color:#f87171;font-weight:700">${G.scores.team2}</span>
+      <span style="color:#9ca3af;margin-right:0.5rem">📊</span>
+    </div>
+    <div class="info-tr">
+      <span style="color:#9ca3af">לקיחה: </span><span style="font-weight:700">${G.trickNum}/10</span>
+      <span style="color:#4b5563;margin:0 0.25rem">|</span>
+      <span style="color:#60a5fa">${G.tricksWon.team1}</span><span style="color:#4b5563"> - </span><span style="color:#f87171">${G.tricksWon.team2}</span>
+    </div>
+    ${cantesHtml}
+    <div class="my-label">
+      <div class="player-label ${isMyTurn?'active':'inactive'}">${G.names[me]} (אתה)</div>
+    </div>
+    <div class="my-hand-area">${hand.map(c=>renderCard(c,validIds.includes(c.id),false)).join('')}</div>
+    ${panel}
+    ${scoringHtml}
+    ${sbHtml}
+  </div>`;
+}
+
+// Global functions
+window.setupNames = setupNames;
+window.bidInput = bidInput;
+window.G = G;
+window.showScoreboard = showScoreboard;
+window.startSetup = function() {
+  if (!Object.values(setupNames).every(n=>n.trim())) return;
+  G = newGame({south:setupNames.south.trim(), east:setupNames.east.trim(), north:setupNames.north.trim(), west:setupNames.west.trim()});
+  window.G = G;
+  startRound(G);
+  render();
+};
+window.doBid = doBid;
+window.doTrump = doTrump;
+window.doSing = doSing;
+window.doDoneSinging = doDoneSinging;
+window.doPlay = doPlay;
+window.nextSeat = nextSeat;
+window.startRound = startRound;
+window.render = render;
+
+// Initial render
+render();
+
+// Re-render on input changes
+document.addEventListener('input', () => {
+  const checks = Object.values(setupNames).every(n => n.trim());
+  const btn = document.querySelector('.btn-gold');
+  if (btn && G === null) btn.disabled = !checks;
+});
+</script>
+</body>
+</html>

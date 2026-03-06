@@ -1,0 +1,11 @@
+node_modules/
+dist/
+dist2/
+.vite/
+*.tsbuildinfo
+*.timestamp-*
+.env
+.env.local
+.DS_Store
+Thumbs.db
+*.swp
