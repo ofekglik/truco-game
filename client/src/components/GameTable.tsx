@@ -74,7 +74,6 @@ export const GameTable: React.FC<GameTableProps> = ({
     const saved = localStorage.getItem('soundEnabled');
     return saved === null ? true : saved === 'true';
   });
-  const [useCustomImages, setUseCustomImages] = useState(false);
   const [handOrder, setHandOrder] = useState<string[]>([]);
   const [trickToast, setTrickToast] = useState<{ winner: string; team1: number; team2: number } | null>(null);
   const [lastCompletedTricksLength, setLastCompletedTricksLength] = useState(0);
@@ -100,14 +99,6 @@ export const GameTable: React.FC<GameTableProps> = ({
   const isMyTurn = gameState.currentTurnSeat === gameState.mySeat;
   const isMobile = windowWidth < 768;
   const isLandscape = window.innerHeight < window.innerWidth;
-
-  // Check for custom card images on mount
-  useEffect(() => {
-    const img = new Image();
-    img.onload = () => setUseCustomImages(true);
-    img.onerror = () => setUseCustomImages(false);
-    img.src = '/cards/oros/1.png';
-  }, []);
 
   // Window resize listener
   useEffect(() => {
@@ -341,8 +332,6 @@ export const GameTable: React.FC<GameTableProps> = ({
     const cardCount = cards.length;
 
     return cards.map((tc, i) => {
-      const cardImageSrc = useCustomImages ? `/cards/${tc.card.suit}/${tc.card.rank}.png` : undefined;
-
       // Center fan layout: cards are offset and rotated around a central point
       const angleStep = cardCount > 1 ? 360 / cardCount : 0;
       const angle = i * angleStep;
@@ -368,8 +357,6 @@ export const GameTable: React.FC<GameTableProps> = ({
             <CardComponent
               card={tc.card}
               small
-              useCustomImages={useCustomImages}
-              imageSrc={cardImageSrc}
             />
             {/* Player name label */}
             <div className="text-xs font-bold text-gray-300 bg-black/50 px-2 py-0.5 rounded whitespace-nowrap">
@@ -1075,8 +1062,6 @@ export const GameTable: React.FC<GameTableProps> = ({
                   playable={isPlayable && gameState.phase === GamePhase.TRICK_PLAY}
                   selected={isSelected}
                   large={!isMobile}
-                  useCustomImages={useCustomImages}
-                  imageSrc={useCustomImages ? `/cards/${card.suit}/${card.rank}.png` : undefined}
                   isBiddingPhase={gameState.phase === GamePhase.BIDDING}
                   onClick={() => {
                     if (gameState.phase === GamePhase.TRICK_PLAY && !dragStateRef.current.isDragging) {
@@ -1097,8 +1082,6 @@ export const GameTable: React.FC<GameTableProps> = ({
             <CardComponent
               card={selectedCard}
               small
-              useCustomImages={useCustomImages}
-              imageSrc={useCustomImages ? `/cards/${selectedCard.suit}/${selectedCard.rank}.png` : undefined}
             />
             <div className="flex flex-col gap-2">
               <button

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card as CardType, SUIT_COLORS, SUIT_SYMBOLS, RANK_NAMES_HE, Suit } from '../types';
 
 interface CardProps {
@@ -8,8 +8,6 @@ interface CardProps {
   onClick?: () => void;
   small?: boolean;
   large?: boolean;
-  useCustomImages?: boolean;
-  imageSrc?: string;
   isBiddingPhase?: boolean;
 }
 
@@ -20,34 +18,59 @@ const SUIT_PIPS: Record<Suit, string> = {
   [Suit.BASTOS]: '♣',
 };
 
-export const CardComponent: React.FC<CardProps> = ({ card, playable, selected, onClick, small, large, useCustomImages, imageSrc, isBiddingPhase }) => {
-  const [imageError, setImageError] = React.useState(false);
+// Cache which card images exist to avoid re-probing on every render
+const imageCache: Record<string, 'loading' | 'ok' | 'fail'> = {};
 
-  // If custom image is available and loads successfully, render as image
-  if (useCustomImages && imageSrc && !imageError) {
+function getCardImagePath(suit: string, rank: number): string {
+  return `/cards/${suit}/${rank}.png`;
+}
+
+export const CardComponent: React.FC<CardProps> = ({ card, playable, selected, onClick, small, large, isBiddingPhase }) => {
+  const imgPath = getCardImagePath(card.suit, card.rank);
+  const cached = imageCache[imgPath];
+  const [imgState, setImgState] = useState<'loading' | 'ok' | 'fail'>(cached || 'loading');
+
+  useEffect(() => {
+    // If already resolved in cache, use it
+    if (cached === 'ok' || cached === 'fail') {
+      setImgState(cached);
+      return;
+    }
+    // Probe image existence
+    const img = new Image();
+    img.onload = () => { imageCache[imgPath] = 'ok'; setImgState('ok'); };
+    img.onerror = () => { imageCache[imgPath] = 'fail'; setImgState('fail'); };
+    imageCache[imgPath] = 'loading';
+    img.src = imgPath;
+  }, [imgPath, cached]);
+
+  const containerClasses = `
+    relative rounded-lg shadow-lg transition-all duration-200 select-none overflow-hidden
+    ${small ? 'w-14 h-20' : large ? 'w-28 h-40' : 'w-20 h-28'}
+    ${playable ? 'cursor-pointer hover:-translate-y-3 hover:shadow-xl' : ''}
+    ${selected ? '-translate-y-4 ring-2 ring-yellow-400' : ''}
+    ${!playable && !small && !isBiddingPhase ? 'opacity-90' : ''}
+  `;
+
+  // Image card — the image IS the card (includes numbers, borders, art)
+  if (imgState === 'ok') {
     return (
-      <div
-        onClick={onClick}
-        className={`
-          relative rounded-lg border-2 bg-white text-black shadow-lg
-          transition-all duration-200 select-none overflow-hidden
-          ${small ? 'w-14 h-20' : large ? 'w-28 h-40' : 'w-20 h-28'}
-          ${playable ? 'cursor-pointer hover:-translate-y-3 hover:shadow-xl border-yellow-400' : 'border-gray-300'}
-          ${selected ? '-translate-y-4 ring-2 ring-yellow-400' : ''}
-          ${!playable && !small && !isBiddingPhase ? 'opacity-90' : ''}
-        `}
-      >
+      <div onClick={onClick} className={containerClasses}>
         <img
-          src={imageSrc}
-          alt={`${card.rank}${card.suit}`}
-          className="w-full h-full object-cover"
-          onError={() => setImageError(true)}
+          src={imgPath}
+          alt={`${card.rank} ${card.suit}`}
+          className="w-full h-full object-fill"
+          draggable={false}
         />
+        {/* Playable highlight overlay */}
+        {playable && (
+          <div className="absolute inset-0 rounded-lg ring-2 ring-yellow-400 pointer-events-none" />
+        )}
       </div>
     );
   }
 
-  // Fall back to CSS-rendered card
+  // Fallback: CSS-rendered card
   const color = SUIT_COLORS[card.suit];
   const pip = SUIT_PIPS[card.suit];
   const symbol = SUIT_SYMBOLS[card.suit];
@@ -61,12 +84,10 @@ export const CardComponent: React.FC<CardProps> = ({ card, playable, selected, o
     <div
       onClick={onClick}
       className={`
-        relative rounded-lg border-2 bg-white text-black shadow-lg
-        transition-all duration-200 select-none
-        ${small ? 'w-14 h-20 text-xs' : large ? 'w-28 h-40 text-base' : 'w-20 h-28 text-sm'}
-        ${playable ? 'cursor-pointer hover:-translate-y-3 hover:shadow-xl border-yellow-400' : 'border-gray-300'}
-        ${selected ? '-translate-y-4 ring-2 ring-yellow-400' : ''}
-        ${!playable && !small && !isBiddingPhase ? 'opacity-90' : ''}
+        ${containerClasses}
+        border-2 bg-white text-black
+        ${small ? 'text-xs' : large ? 'text-base' : 'text-sm'}
+        ${playable ? 'border-yellow-400' : 'border-gray-300'}
       `}
       style={{ fontFamily: 'serif' }}
     >
@@ -122,7 +143,7 @@ export const CardBack: React.FC<CardBackProps> = ({ small, backImageSrc }) => {
         <img
           src={backImageSrc}
           alt="card-back"
-          className="w-full h-full object-cover"
+          className="w-full h-full object-fill"
           onError={() => setImageError(true)}
         />
       </div>
