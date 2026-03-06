@@ -47,6 +47,25 @@ function broadcastState(room: Room | null) {
 io.on('connection', (socket) => {
   console.log(`Player connected: ${socket.id}`);
   
+  // Handle reconnection — client sends this when Socket.IO reconnects
+  socket.on('rejoinRoom', ({ roomCode, playerName }: { roomCode: string; playerName: string }) => {
+    console.log(`[rejoinRoom] socket=${socket.id}, room=${roomCode}, name=${playerName}`);
+    const result = joinRoom(roomCode, socket.id, playerName);
+    if ('error' in result) {
+      console.log(`[rejoinRoom] failed: ${result.error}`);
+      socket.emit('roomError', result.error);
+      return;
+    }
+    socket.join(result.room.code);
+    socket.emit('roomJoined', {
+      roomCode: result.room.code,
+      seat: result.seat,
+      playerName,
+    });
+    broadcastState(result.room);
+    console.log(`[rejoinRoom] success: ${playerName} back in seat ${result.seat}`);
+  });
+
   socket.on('createRoom', (playerName: string) => {
     const result = createRoom(socket.id, playerName);
     if (!result) {

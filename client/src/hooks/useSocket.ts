@@ -10,6 +10,7 @@ interface RoomInfo {
 
 export function useSocket() {
   const socketRef = useRef<Socket | null>(null);
+  const roomInfoRef = useRef<RoomInfo | null>(null);
   const [connected, setConnected] = useState(false);
   const [gameState, setGameState] = useState<ClientGameState | null>(null);
   const [roomInfo, setRoomInfo] = useState<RoomInfo | null>(null);
@@ -21,11 +22,20 @@ export function useSocket() {
     });
     socketRef.current = socket;
 
-    socket.on('connect', () => setConnected(true));
+    socket.on('connect', () => {
+      setConnected(true);
+      // Auto-rejoin room after reconnection (e.g. iPhone background/lock)
+      const info = roomInfoRef.current;
+      if (info) {
+        console.log(`[socket] reconnected, rejoining room ${info.roomCode} as ${info.playerName}`);
+        socket.emit('rejoinRoom', { roomCode: info.roomCode, playerName: info.playerName });
+      }
+    });
     socket.on('disconnect', () => setConnected(false));
     socket.on('gameState', (state: ClientGameState) => setGameState(state));
     socket.on('roomJoined', (data: RoomInfo) => {
       setRoomInfo(data);
+      roomInfoRef.current = data;
       setError(null);
     });
     socket.on('roomError', (msg: string) => setError(msg));

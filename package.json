@@ -10,5 +10,8 @@
     "build": "cd client && npm install --include=dev && npm run build && cd ../server && npm install --include=dev && npm run build",
     "start": "node server/dist/server.mjs",
     "dev": "cd server && npm run build && node dist/server.mjs"
+  },
+  "dependencies": {
+    "socket.io-client": "^4.8.3"
   }
 }

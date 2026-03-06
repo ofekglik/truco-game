@@ -52,19 +52,25 @@ export function createRoom(socketId: string, playerName: string): { room: Room; 
 export function joinRoom(roomCode: string, socketId: string, playerName: string): { room: Room; seat: SeatPosition } | { error: string } {
   const room = rooms.get(roomCode.toUpperCase());
   if (!room) return { error: 'חדר לא נמצא' };
-  
+
   if (room.state.phase !== GamePhase.WAITING) {
-    // Check if reconnecting
-    for (const [seat, sid] of room.seatToSocket.entries()) {
+    // Check if reconnecting — match by name (case-insensitive, trimmed)
+    const normalizedName = playerName.trim().toLowerCase();
+    for (const seat of SEAT_ORDER) {
       const player = room.state.players[seat];
-      if (player && !player.connected && player.name === playerName) {
-        // Reconnect
-        room.socketToSeat.delete(sid);
+      if (player && player.name.trim().toLowerCase() === normalizedName) {
+        // Reconnect — allow even if still marked connected (socket might have changed)
+        const oldSid = room.seatToSocket.get(seat);
+        if (oldSid) {
+          room.socketToSeat.delete(oldSid);
+          socketToRoom.delete(oldSid);
+        }
         room.seatToSocket.set(seat, socketId);
         room.socketToSeat.set(socketId, seat);
         socketToRoom.set(socketId, room.code);
         player.id = socketId;
         player.connected = true;
+        console.log(`[roomManager] Reconnected ${playerName} to seat ${seat} (socket ${socketId})`);
         return { room, seat };
       }
     }
