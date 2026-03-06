@@ -65,8 +65,8 @@ export const GameTable: React.FC<GameTableProps> = ({
   onLeaveRoom, reconnecting, connected
 }) => {
   const [bidAmount, setBidAmount] = useState(70);
-  const [showScoreboard, setShowScoreboard] = useState(false);
-  const [showDebug, setShowDebug] = useState(false);
+
+
   const [showMenu, setShowMenu] = useState(false);
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
@@ -385,51 +385,39 @@ export const GameTable: React.FC<GameTableProps> = ({
     if (gameState.phase !== GamePhase.BIDDING || !isMyTurn) return null;
 
     return (
-      <>
-        {/* Semi-transparent backdrop - stops above the hand area */}
-        <div className="absolute inset-0 bottom-48 z-29 bg-black/40 backdrop-blur-sm animate-fadeIn" />
+      <div className="absolute left-1/2 -translate-x-1/2 z-30 animate-slideUpBottom"
+        style={{ bottom: isMobile ? '190px' : '250px', width: isMobile ? 'calc(100% - 16px)' : '400px' }}>
+        <div className="bg-[#16213e]/95 backdrop-blur-md rounded-xl px-3 py-2.5 shadow-2xl border border-[#4a5a7e]/60 flex items-center gap-2" dir="ltr">
+          {/* Pass button */}
+          <button onClick={onPassBid}
+            className="px-3 py-2 bg-gray-600/80 hover:bg-gray-500 text-white font-bold rounded-lg transition-colors text-xs whitespace-nowrap">
+            עבור
+          </button>
 
-        {/* Centered bid panel - positioned above the hand */}
-        <div className="absolute left-1/2 -translate-x-1/2 z-30 animate-slideUpBottom"
-          style={{ bottom: isMobile ? '210px' : '220px', width: isMobile ? '90%' : '340px' }}>
-          <div className="bg-[#16213e] rounded-2xl p-4 shadow-2xl border border-[#2a3a5e]">
-            <p className="text-center text-yellow-400 font-bold mb-4 text-base">הצעה שלך</p>
-            <div className="flex items-center justify-center gap-3 mb-4" dir="ltr">
-              <button onClick={() => setBidAmount(Math.max(validActions.minBid, bidAmount - 10))}
-                className="w-11 h-11 rounded-lg bg-[#2a3a5e] hover:bg-[#3a4a6e] text-white text-2xl font-bold transition-colors">−</button>
-              <input
-                type="number"
-                value={bidAmount}
-                onChange={e => {
-                  const raw = Number(e.target.value);
-                  const rounded = Math.round(raw / 10) * 10;
-                  setBidAmount(Math.max(validActions.minBid, Math.min(220, rounded)));
-                }}
-                className="w-20 h-11 text-center text-2xl font-bold bg-[#0a0a1a] text-yellow-400 rounded-lg border-2 border-[#4a5a7e]"
-                min={validActions.minBid}
-                max={220}
-                step={10}
-              />
-              <button onClick={() => setBidAmount(Math.min(220, bidAmount + 10))}
-                className="w-11 h-11 rounded-lg bg-[#2a3a5e] hover:bg-[#3a4a6e] text-white text-2xl font-bold transition-colors">+</button>
+          {/* Bid controls: - amount + */}
+          <div className="flex items-center gap-1 flex-shrink-0">
+            <button onClick={() => setBidAmount(Math.max(validActions.minBid, bidAmount - 10))}
+              className="w-8 h-8 rounded-lg bg-[#2a3a5e] hover:bg-[#3a4a6e] text-white text-lg font-bold transition-colors flex items-center justify-center">−</button>
+            <div className="w-12 h-8 flex items-center justify-center text-lg font-bold text-yellow-400 bg-[#0a0a1a] rounded-lg border border-[#4a5a7e]">
+              {bidAmount}
             </div>
-            <div className="flex gap-2">
-              <button onClick={() => { onPlaceBid(bidAmount); setBidAmount(Math.max(70, bidAmount + 10)); }}
-                className="flex-1 py-2.5 bg-yellow-600 hover:bg-yellow-500 text-black font-bold rounded-xl transition-colors text-sm">
-                קנה ({bidAmount})
-              </button>
-              <button onClick={() => onPlaceBid(230)}
-                className="py-2.5 px-3 bg-red-700 hover:bg-red-600 text-white font-bold rounded-xl transition-colors text-sm">
-                קאפו!
-              </button>
-              <button onClick={onPassBid}
-                className="flex-1 py-2.5 bg-gray-700 hover:bg-gray-600 text-white font-bold rounded-xl transition-colors text-sm">
-                עבור
-              </button>
-            </div>
+            <button onClick={() => setBidAmount(Math.min(220, bidAmount + 10))}
+              className="w-8 h-8 rounded-lg bg-[#2a3a5e] hover:bg-[#3a4a6e] text-white text-lg font-bold transition-colors flex items-center justify-center">+</button>
           </div>
+
+          {/* Buy button */}
+          <button onClick={() => { onPlaceBid(bidAmount); setBidAmount(Math.max(70, bidAmount + 10)); }}
+            className="flex-1 py-2 bg-yellow-500 hover:bg-yellow-400 text-black font-bold rounded-lg transition-colors text-xs whitespace-nowrap">
+            קנה ({bidAmount})
+          </button>
+
+          {/* Capo button */}
+          <button onClick={() => onPlaceBid(230)}
+            className="px-2.5 py-2 bg-red-600 hover:bg-red-500 text-white font-bold rounded-lg transition-colors text-xs whitespace-nowrap">
+            קאפו!
+          </button>
         </div>
-      </>
+      </div>
     );
   };
 
@@ -522,66 +510,79 @@ export const GameTable: React.FC<GameTableProps> = ({
     const lastRound = gameState.roundHistory[gameState.roundHistory.length - 1];
     if (!lastRound) return null;
 
+    const team1Won = lastRound.team1Total > lastRound.team2Total;
+    const biddingFell = lastRound.biddingTeamFell;
+
     return (
-      <div className="absolute inset-0 z-40 bg-black/70 flex items-center justify-center backdrop-blur-sm">
-        <div className="bg-[#16213e] border border-[#4a5a7e] rounded-2xl p-6 w-full max-w-sm shadow-2xl">
-          <h3 className="text-2xl font-bold text-center text-yellow-400 mb-4">סיום סיבוב {gameState.roundNumber}</h3>
+      <div className="absolute inset-0 z-40 bg-black/75 flex items-center justify-center backdrop-blur-md animate-fadeIn">
+        <div className="bg-gradient-to-b from-[#1a2744] to-[#111b30] border border-[#3a4a6e] rounded-2xl p-5 w-full max-w-sm shadow-2xl animate-slideUpBottom mx-4">
+          {/* Header with emoji */}
+          <div className="text-center mb-4">
+            <div className="text-4xl mb-2 animate-countPulse">{biddingFell ? '💥' : '🎉'}</div>
+            <h3 className="text-xl font-bold text-yellow-400">סיום סיבוב {gameState.roundNumber}</h3>
+            {biddingFell && (
+              <p className="text-red-400 text-sm font-bold mt-1 animate-fadeIn">הקבוצה המציעה נפלה!</p>
+            )}
+            {!biddingFell && lastRound.bidAmount && (
+              <p className="text-green-400 text-sm mt-1 animate-fadeIn">הצעה של {lastRound.bidAmount} הצליחה!</p>
+            )}
+          </div>
 
-          <div className="grid grid-cols-2 gap-4 mb-4">
-            <div className="bg-blue-900/30 rounded-lg p-3 text-center border border-blue-700">
-              <p className="text-blue-400 text-sm mb-1">קבוצה A</p>
-              <p className="text-2xl font-bold text-white">{lastRound.team1Total}</p>
-              <p className="text-xs text-gray-400">לקיחות: {lastRound.team1TrickPoints} | שירה: {lastRound.team1SingingPoints}</p>
+          {/* Round scores */}
+          <div className="grid grid-cols-2 gap-3 mb-4">
+            <div className={`rounded-xl p-3 text-center border transition-all ${
+              team1Won
+                ? 'bg-blue-800/40 border-blue-400 shadow-lg shadow-blue-500/20'
+                : 'bg-blue-900/20 border-blue-800/50'
+            }`}>
+              <p className="text-blue-400 text-xs font-medium mb-1">קבוצה A</p>
+              <p className="text-2xl font-bold text-white animate-countPulse">{lastRound.team1Total}</p>
+              <p className="text-[10px] text-gray-400 mt-1">לקיחות {lastRound.team1TrickPoints} • שירה {lastRound.team1SingingPoints}</p>
             </div>
-            <div className="bg-red-900/30 rounded-lg p-3 text-center border border-red-700">
-              <p className="text-red-400 text-sm mb-1">קבוצה B</p>
-              <p className="text-2xl font-bold text-white">{lastRound.team2Total}</p>
-              <p className="text-xs text-gray-400">לקיחות: {lastRound.team2TrickPoints} | שירה: {lastRound.team2SingingPoints}</p>
+            <div className={`rounded-xl p-3 text-center border transition-all ${
+              !team1Won
+                ? 'bg-red-800/40 border-red-400 shadow-lg shadow-red-500/20'
+                : 'bg-red-900/20 border-red-800/50'
+            }`}>
+              <p className="text-red-400 text-xs font-medium mb-1">קבוצה B</p>
+              <p className="text-2xl font-bold text-white animate-countPulse">{lastRound.team2Total}</p>
+              <p className="text-[10px] text-gray-400 mt-1">לקיחות {lastRound.team2TrickPoints} • שירה {lastRound.team2SingingPoints}</p>
             </div>
           </div>
 
-          {lastRound.biddingTeamFell && (
-            <div className="bg-red-900/40 border border-red-600 rounded-lg p-2 mb-4 text-center">
-              <p className="text-red-300 font-bold">הקבוצה המציעה נפלה!</p>
-            </div>
-          )}
-
-          <div className="bg-[#0a0a1a] rounded-lg p-3 mb-4">
-            <p className="text-center text-gray-300 text-sm">ניקוד מצטבר</p>
-            <div className="flex justify-around mt-2">
-              <div className="text-center">
-                <p className="text-blue-400 text-xs">קבוצה A</p>
-                <p className="text-xl font-bold text-white">{gameState.scores.team1}</p>
+          {/* Cumulative + progress */}
+          <div className="bg-black/30 rounded-xl p-3 mb-4">
+            <div className="flex justify-between items-center mb-2">
+              <div className="text-center flex-1">
+                <p className="text-blue-400 text-[10px]">קבוצה A</p>
+                <p className="text-lg font-bold text-white">{gameState.scores.team1}</p>
               </div>
-              <div className="text-yellow-500 text-xl">—</div>
-              <div className="text-center">
-                <p className="text-red-400 text-xs">קבוצה B</p>
-                <p className="text-xl font-bold text-white">{gameState.scores.team2}</p>
+              <div className="text-gray-500 text-xs px-2">ניקוד מצטבר</div>
+              <div className="text-center flex-1">
+                <p className="text-red-400 text-[10px]">קבוצה B</p>
+                <p className="text-lg font-bold text-white">{gameState.scores.team2}</p>
               </div>
             </div>
-          </div>
-
-          <div className="bg-[#0a0a1a] rounded-lg p-3 mb-4">
-            <p className="text-gray-400 text-xs text-center mb-2">התקדמות לניצחון ({gameState.targetScore})</p>
-            <div className="flex gap-2 mb-2">
-              <div className="flex-1 bg-gray-700 rounded-full h-2 overflow-hidden">
+            <div className="flex gap-2">
+              <div className="flex-1 bg-gray-800 rounded-full h-2.5 overflow-hidden">
                 <div
-                  className="bg-blue-500 h-full transition-all duration-1000"
+                  className="bg-gradient-to-r from-blue-600 to-blue-400 h-full transition-all duration-1000 animate-shimmer"
                   style={{ width: `${Math.min(100, (gameState.scores.team1 / gameState.targetScore) * 100)}%` }}
                 />
               </div>
-              <div className="flex-1 bg-gray-700 rounded-full h-2 overflow-hidden">
+              <div className="flex-1 bg-gray-800 rounded-full h-2.5 overflow-hidden">
                 <div
-                  className="bg-red-500 h-full transition-all duration-1000"
+                  className="bg-gradient-to-r from-red-600 to-red-400 h-full transition-all duration-1000 animate-shimmer"
                   style={{ width: `${Math.min(100, (gameState.scores.team2 / gameState.targetScore) * 100)}%` }}
                 />
               </div>
             </div>
+            <p className="text-gray-500 text-[10px] text-center mt-1">יעד: {gameState.targetScore}</p>
           </div>
 
           <button onClick={onNextRound}
-            className="w-full py-3 bg-yellow-600 hover:bg-yellow-500 text-black font-bold rounded-xl text-lg transition-colors">
-            סיבוב הבא
+            className="w-full py-3 bg-gradient-to-r from-yellow-500 to-yellow-600 hover:from-yellow-400 hover:to-yellow-500 text-black font-bold rounded-xl text-lg transition-all shadow-lg animate-pulseGlow-gold">
+            סיבוב הבא ▶
           </button>
         </div>
       </div>
@@ -593,43 +594,75 @@ export const GameTable: React.FC<GameTableProps> = ({
     const team1Wins = gameState.scores.team1 >= gameState.targetScore;
     const winnerTeam = team1Wins ? 'קבוצה A' : 'קבוצה B';
     const winnerColor = team1Wins ? 'text-blue-400' : 'text-red-400';
-    const winnerBg = team1Wins ? 'from-blue-900/50 to-blue-800/50' : 'from-red-900/50 to-red-800/50';
+    const winnerGlow = team1Wins ? 'shadow-blue-500/40' : 'shadow-red-500/40';
 
     return (
-      <div className="fixed inset-0 z-50 bg-black/85 flex items-center justify-center backdrop-blur-md p-4">
-        <div className="w-full max-w-sm">
-          {/* Trophy + winner */}
-          <div className="text-center mb-6">
-            <div className="text-6xl mb-3">🏆</div>
-            <h2 className={`text-3xl font-bold ${winnerColor}`}>{winnerTeam} ניצחה!</h2>
+      <div className="fixed inset-0 z-50 bg-black/85 flex items-center justify-center backdrop-blur-md p-4 animate-fadeIn">
+        <div className="w-full max-w-sm animate-slideUpBottom">
+          {/* Sparkle particles */}
+          <div className="relative">
+            <div className="absolute -top-8 left-1/2 -translate-x-1/2 w-40 h-40 pointer-events-none">
+              {[...Array(8)].map((_, i) => (
+                <div key={i} className="absolute animate-sparkle" style={{
+                  left: `${20 + Math.random() * 60}%`,
+                  top: `${10 + Math.random() * 60}%`,
+                  animationDelay: `${i * 0.3}s`,
+                  animationDuration: `${1.5 + Math.random()}s`,
+                }}>
+                  <span className="text-yellow-300 text-xs">✦</span>
+                </div>
+              ))}
+            </div>
           </div>
 
-          <div className="bg-[#16213e] border border-[#4a5a7e] rounded-2xl p-6 shadow-2xl">
+          {/* Trophy + winner */}
+          <div className="text-center mb-5">
+            <div className="text-7xl mb-3 animate-trophyBounce inline-block" style={{
+              filter: 'drop-shadow(0 0 20px rgba(251, 191, 36, 0.6))',
+            }}>🏆</div>
+            <h2 className={`text-3xl font-bold ${winnerColor} animate-countPulse`} style={{
+              textShadow: team1Wins ? '0 0 20px rgba(59,130,246,0.5)' : '0 0 20px rgba(239,68,68,0.5)',
+            }}>
+              {winnerTeam} ניצחה!
+            </h2>
+          </div>
+
+          <div className={`bg-gradient-to-b from-[#1a2744] to-[#111b30] border border-[#3a4a6e] rounded-2xl p-5 shadow-2xl ${winnerGlow}`}>
             {/* Final scores */}
             <div className="grid grid-cols-2 gap-3 mb-4">
-              <div className={`bg-gradient-to-br ${team1Wins ? 'from-blue-800/60 to-blue-900/60 border-blue-500 ring-2 ring-blue-400/50' : 'from-blue-900/30 to-blue-900/20 border-blue-700'} rounded-xl p-4 text-center border`}>
+              <div className={`rounded-xl p-4 text-center border transition-all ${
+                team1Wins
+                  ? 'bg-blue-800/40 border-blue-400 shadow-lg shadow-blue-500/30 animate-shimmerBorder'
+                  : 'bg-blue-900/20 border-blue-800/50'
+              }`}>
                 <p className="text-blue-400 text-xs font-medium mb-1">קבוצה A</p>
-                <p className="text-3xl font-bold text-white">{gameState.scores.team1}</p>
+                <p className="text-3xl font-bold text-white animate-countPulse">{gameState.scores.team1}</p>
               </div>
-              <div className={`bg-gradient-to-br ${!team1Wins ? 'from-red-800/60 to-red-900/60 border-red-500 ring-2 ring-red-400/50' : 'from-red-900/30 to-red-900/20 border-red-700'} rounded-xl p-4 text-center border`}>
+              <div className={`rounded-xl p-4 text-center border transition-all ${
+                !team1Wins
+                  ? 'bg-red-800/40 border-red-400 shadow-lg shadow-red-500/30 animate-shimmerBorder'
+                  : 'bg-red-900/20 border-red-800/50'
+              }`}>
                 <p className="text-red-400 text-xs font-medium mb-1">קבוצה B</p>
-                <p className="text-3xl font-bold text-white">{gameState.scores.team2}</p>
+                <p className="text-3xl font-bold text-white animate-countPulse" style={{ animationDelay: '0.2s' }}>{gameState.scores.team2}</p>
               </div>
             </div>
 
-            <p className="text-gray-500 text-xs text-center mb-4">יעד: {gameState.targetScore} נקודות</p>
+            <p className="text-gray-500 text-xs text-center mb-3">יעד: {gameState.targetScore} נקודות</p>
 
             {/* Round history summary */}
             {gameState.roundHistory.length > 0 && (
-              <div className="bg-black/30 rounded-lg p-3 mb-4 max-h-32 overflow-y-auto">
+              <div className="bg-black/30 rounded-xl p-3 mb-4 max-h-32 overflow-y-auto">
                 <p className="text-gray-400 text-xs font-medium mb-2">סיכום סיבובים:</p>
                 {gameState.roundHistory.map((r, i) => (
-                  <div key={i} className="flex justify-between text-xs py-0.5">
+                  <div key={i} className={`flex justify-between text-xs py-1 px-2 rounded ${
+                    i % 2 === 0 ? 'bg-white/5' : ''
+                  }`}>
                     <span className="text-gray-500">סיבוב {i + 1}</span>
                     <span>
-                      <span className="text-blue-400">{r.team1Total}</span>
+                      <span className="text-blue-400 font-bold">{r.team1Total}</span>
                       <span className="text-gray-600 mx-1">-</span>
-                      <span className="text-red-400">{r.team2Total}</span>
+                      <span className="text-red-400 font-bold">{r.team2Total}</span>
                     </span>
                   </div>
                 ))}
@@ -640,7 +673,7 @@ export const GameTable: React.FC<GameTableProps> = ({
             <div className="flex flex-col gap-2">
               <button
                 onClick={onNextRound}
-                className="w-full py-3 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-400 hover:to-green-500 text-white font-bold rounded-xl transition-all shadow-lg hover:shadow-green-500/30"
+                className="w-full py-3 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-400 hover:to-green-500 text-white font-bold rounded-xl transition-all shadow-lg animate-pulseGlow-green"
               >
                 🔄 שחק שוב (אותו חדר)
               </button>
@@ -663,15 +696,19 @@ export const GameTable: React.FC<GameTableProps> = ({
     onLeaveRoom();
   };
 
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
   const toggleFullscreen = () => {
-    if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen?.().catch(() => {
-        console.warn('Fullscreen request failed');
-      });
+    if (isIOS) {
+      // iOS doesn't support Fullscreen API — show a tip instead
+      alert('באייפון: לחץ על "שתף" ← "הוסף למסך הבית" כדי לשחק במסך מלא');
+      return;
+    }
+    const doc = document as any;
+    const el = document.documentElement as any;
+    if (!doc.fullscreenElement && !doc.webkitFullscreenElement) {
+      (el.requestFullscreen || el.webkitRequestFullscreen)?.call(el).catch(() => {});
     } else {
-      document.exitFullscreen?.().catch(() => {
-        console.warn('Exit fullscreen failed');
-      });
+      (doc.exitFullscreen || doc.webkitExitFullscreen)?.call(doc).catch(() => {});
     }
   };
 
@@ -755,6 +792,60 @@ export const GameTable: React.FC<GameTableProps> = ({
         .animate-fadeIn {
           animation: fadeIn 0.3s ease-out forwards;
         }
+        @keyframes countPulse {
+          0% { transform: scale(0.5); opacity: 0; }
+          50% { transform: scale(1.15); }
+          100% { transform: scale(1); opacity: 1; }
+        }
+        .animate-countPulse {
+          animation: countPulse 0.5s ease-out forwards;
+        }
+        @keyframes shimmer {
+          0% { background-position: -200% center; }
+          100% { background-position: 200% center; }
+        }
+        .animate-shimmer {
+          background-size: 200% 100%;
+          animation: shimmer 2s linear infinite;
+        }
+        @keyframes sparkle {
+          0%, 100% { opacity: 0; transform: scale(0) translateY(0); }
+          50% { opacity: 1; transform: scale(1) translateY(-10px); }
+        }
+        .animate-sparkle {
+          animation: sparkle 2s ease-in-out infinite;
+        }
+        @keyframes trophyBounce {
+          0% { transform: scale(0) rotate(-10deg); }
+          60% { transform: scale(1.3) rotate(5deg); }
+          80% { transform: scale(0.95) rotate(-2deg); }
+          100% { transform: scale(1) rotate(0); }
+        }
+        .animate-trophyBounce {
+          animation: trophyBounce 0.8s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+        }
+        @keyframes pulseGlowGreen {
+          0%, 100% { box-shadow: 0 0 5px rgba(34,197,94,0.3); }
+          50% { box-shadow: 0 0 20px rgba(34,197,94,0.6); }
+        }
+        .animate-pulseGlow-green {
+          animation: pulseGlowGreen 2s ease-in-out infinite;
+        }
+        @keyframes pulseGlowGold {
+          0%, 100% { box-shadow: 0 0 5px rgba(234,179,8,0.3); }
+          50% { box-shadow: 0 0 20px rgba(234,179,8,0.6); }
+        }
+        .animate-pulseGlow-gold {
+          animation: pulseGlowGold 2s ease-in-out infinite;
+        }
+        @keyframes shimmerBorder {
+          0% { border-color: rgba(255,255,255,0.2); }
+          50% { border-color: rgba(255,255,255,0.6); }
+          100% { border-color: rgba(255,255,255,0.2); }
+        }
+        .animate-shimmerBorder {
+          animation: shimmerBorder 2s ease-in-out infinite;
+        }
       `}</style>
 
       {/* Table felt */}
@@ -810,7 +901,7 @@ export const GameTable: React.FC<GameTableProps> = ({
               <h3 className="text-xl font-bold text-yellow-400 mb-4">תפריט</h3>
 
               <button
-                onClick={() => setShowScoreboard(!showScoreboard)}
+                onClick={() => { setShowScorePill(true); setShowMenu(false); }}
                 className="w-full py-3 px-4 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-lg transition-colors text-right"
               >
                 📊 הצג טבלת ניקוד
@@ -1052,22 +1143,6 @@ export const GameTable: React.FC<GameTableProps> = ({
       {renderGameOver()}
 
 
-      {/* Debug toggle */}
-      {showDebug && (
-        <div className="absolute bottom-8 right-2 z-50 bg-black/90 text-[10px] text-green-400 p-2 rounded font-mono max-w-xs max-h-48 overflow-auto" dir="ltr">
-          <div>phase: {gameState.phase}</div>
-          <div>mySeat: {gameState.mySeat}</div>
-          <div>turn: {gameState.currentTurnSeat}</div>
-          <div>isMyTurn: {String(isMyTurn)}</div>
-          <div>trick#{gameState.trickNumber} cards: {gameState.currentTrick.cards.map(tc => `${tc.seat}:${tc.card.id}`).join(', ') || 'none'}</div>
-          <div>trump: {gameState.trumpSuit || 'none'}</div>
-          <div>playable: [{validActions.playableCards.join(', ')}]</div>
-          <div>hand: [{gameState.myHand.map(c => c.id).join(', ')}]</div>
-          <div>handOrder: [{handOrder.join(', ')}]</div>
-          <div>connected: {String(connected)}</div>
-          <div>reconnecting: {String(reconnecting)}</div>
-        </div>
-      )}
     </div>
   );
 };
