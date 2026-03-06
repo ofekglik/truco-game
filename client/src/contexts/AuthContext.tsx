@@ -18,9 +18,11 @@ interface AuthContextType {
   profile: UserProfile | null;
   loading: boolean;
   needsNickname: boolean;
+  isGuest: boolean;
   signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
   updateNickname: (nickname: string, avatar: string) => Promise<void>;
+  signInAsGuest: (nickname: string, avatar: string) => Promise<void>;
   isSupabaseEnabled: boolean;
 }
 
@@ -31,6 +33,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [needsNickname, setNeedsNickname] = useState(false);
+  const [isGuest, setIsGuest] = useState(false);
   const isSupabaseEnabled = isSupabaseConfigured();
 
   // Check for existing session on mount
@@ -153,6 +156,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [user, isSupabaseEnabled]);
 
+  const signInAsGuest = useCallback(async (nickname: string, avatar: string) => {
+    if (!nickname.trim()) throw new Error('יש להכניס שם');
+    if (nickname.length > 15) throw new Error('השם לא יכול להכיל יותר מ-15 תווים');
+
+    // Create a fake profile for guest mode (not saved to database)
+    const guestProfile: UserProfile = {
+      id: `guest_${Date.now()}`,
+      nickname: nickname.trim(),
+      avatar,
+      elo_rating: 1500,
+      xp: 0,
+      level: 1,
+      created_at: new Date().toISOString(),
+      last_seen: new Date().toISOString(),
+      is_online: true,
+    };
+
+    setProfile(guestProfile);
+    setIsGuest(true);
+    setNeedsNickname(false);
+  }, []);
+
   return (
     <AuthContext.Provider
       value={{
@@ -160,9 +185,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         profile,
         loading,
         needsNickname,
+        isGuest,
         signInWithGoogle,
         signOut,
         updateNickname,
+        signInAsGuest,
         isSupabaseEnabled,
       }}
     >

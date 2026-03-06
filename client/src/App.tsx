@@ -44,13 +44,13 @@ function AppContent() {
     );
   }
 
-  // Not authenticated - show login screen
-  if (!user) {
+  // No user and no profile - show guest entry screen (login screen repurposed)
+  if (!user && !profile) {
     return <LoginScreen />;
   }
 
   // Authenticated but no profile - show nickname screen
-  if (needsNickname) {
+  if (user && needsNickname) {
     return <NicknameScreen />;
   }
 
