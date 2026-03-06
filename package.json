@@ -7,7 +7,7 @@
     "node": "20.x"
   },
   "scripts": {
-    "build": "npm install --prefix client && npm run build --prefix client && npm install --prefix server && npm run build --prefix server",
+    "build": "cd client && npm install --include=dev && npm run build && cd ../server && npm install --include=dev && npm run build",
     "start": "node server/dist/server.mjs",
     "dev": "cd server && npm run build && node dist/server.mjs"
   }
