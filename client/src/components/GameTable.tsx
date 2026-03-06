@@ -80,6 +80,7 @@ export const GameTable: React.FC<GameTableProps> = ({
   const [lastCompletedTricksLength, setLastCompletedTricksLength] = useState(0);
   const [windowWidth, setWindowWidth] = useState(window.innerWidth);
   const [showScorePill, setShowScorePill] = useState(false);
+  const [draggingCardId, setDraggingCardId] = useState<string | null>(null);
 
   const dragStateRef = useRef<{
     isDragging: boolean;
@@ -178,6 +179,7 @@ export const GameTable: React.FC<GameTableProps> = ({
     dragStateRef.current.draggedCardId = cardId;
     dragStateRef.current.startX = mouseEvent.clientX;
     dragStateRef.current.startY = mouseEvent.clientY;
+    setDraggingCardId(cardId);
   }, []);
 
   const handleDragMove = useCallback((e: React.MouseEvent | React.TouchEvent) => {
@@ -211,6 +213,7 @@ export const GameTable: React.FC<GameTableProps> = ({
   const handleDragEnd = useCallback(() => {
     dragStateRef.current.isDragging = false;
     dragStateRef.current.draggedCardId = null;
+    setDraggingCardId(null);
   }, []);
 
   const handleTouchStart = useCallback((cardId: string, e: React.TouchEvent) => {
@@ -218,6 +221,7 @@ export const GameTable: React.FC<GameTableProps> = ({
     dragStateRef.current.touchStartTime = Date.now();
     dragStateRef.current.startX = e.touches[0].clientX;
     dragStateRef.current.startY = e.touches[0].clientY;
+    setDraggingCardId(cardId);
   }, []);
 
   const handleTouchMove = useCallback((e: React.TouchEvent) => {
@@ -382,21 +386,17 @@ export const GameTable: React.FC<GameTableProps> = ({
 
     return (
       <>
-        {/* Semi-transparent backdrop */}
-        <div className="absolute inset-0 z-29 bg-black/50 backdrop-blur-sm animate-fadeIn" />
+        {/* Semi-transparent backdrop - stops above the hand area */}
+        <div className="absolute inset-0 bottom-48 z-29 bg-black/40 backdrop-blur-sm animate-fadeIn" />
 
-        {/* Bottom sheet modal */}
-        <div className="absolute bottom-0 left-0 right-0 z-30 animate-slideUpBottom">
-          {/* Drag handle */}
-          <div className="flex justify-center pt-3 pb-2">
-            <div className="w-12 h-1 bg-gray-500 rounded-full" />
-          </div>
-
-          <div className="bg-[#16213e] rounded-t-3xl p-6 shadow-2xl">
-            <p className="text-center text-yellow-400 font-bold mb-6 text-lg">הצעה שלך</p>
-            <div className="flex items-center gap-3 mb-6" dir="ltr">
+        {/* Centered bid panel - positioned above the hand */}
+        <div className="absolute left-1/2 -translate-x-1/2 z-30 animate-slideUpBottom"
+          style={{ bottom: isMobile ? '210px' : '220px', width: isMobile ? '90%' : '340px' }}>
+          <div className="bg-[#16213e] rounded-2xl p-4 shadow-2xl border border-[#2a3a5e]">
+            <p className="text-center text-yellow-400 font-bold mb-4 text-base">הצעה שלך</p>
+            <div className="flex items-center justify-center gap-3 mb-4" dir="ltr">
               <button onClick={() => setBidAmount(Math.max(validActions.minBid, bidAmount - 10))}
-                className="w-12 h-12 rounded-lg bg-[#2a3a5e] hover:bg-[#3a4a6e] text-white text-2xl font-bold transition-colors">−</button>
+                className="w-11 h-11 rounded-lg bg-[#2a3a5e] hover:bg-[#3a4a6e] text-white text-2xl font-bold transition-colors">−</button>
               <input
                 type="number"
                 value={bidAmount}
@@ -405,25 +405,25 @@ export const GameTable: React.FC<GameTableProps> = ({
                   const rounded = Math.round(raw / 10) * 10;
                   setBidAmount(Math.max(validActions.minBid, Math.min(220, rounded)));
                 }}
-                className="w-24 h-12 text-center text-3xl font-bold bg-[#0a0a1a] text-yellow-400 rounded-lg border-2 border-[#4a5a7e]"
+                className="w-20 h-11 text-center text-2xl font-bold bg-[#0a0a1a] text-yellow-400 rounded-lg border-2 border-[#4a5a7e]"
                 min={validActions.minBid}
                 max={220}
                 step={10}
               />
               <button onClick={() => setBidAmount(Math.min(220, bidAmount + 10))}
-                className="w-12 h-12 rounded-lg bg-[#2a3a5e] hover:bg-[#3a4a6e] text-white text-2xl font-bold transition-colors">+</button>
+                className="w-11 h-11 rounded-lg bg-[#2a3a5e] hover:bg-[#3a4a6e] text-white text-2xl font-bold transition-colors">+</button>
             </div>
             <div className="flex gap-2">
               <button onClick={() => { onPlaceBid(bidAmount); setBidAmount(Math.max(70, bidAmount + 10)); }}
-                className="flex-1 py-3 bg-yellow-600 hover:bg-yellow-500 text-black font-bold rounded-xl transition-colors">
+                className="flex-1 py-2.5 bg-yellow-600 hover:bg-yellow-500 text-black font-bold rounded-xl transition-colors text-sm">
                 קנה ({bidAmount})
               </button>
               <button onClick={() => onPlaceBid(230)}
-                className="py-3 px-4 bg-red-700 hover:bg-red-600 text-white font-bold rounded-xl transition-colors">
+                className="py-2.5 px-3 bg-red-700 hover:bg-red-600 text-white font-bold rounded-xl transition-colors text-sm">
                 קאפו!
               </button>
               <button onClick={onPassBid}
-                className="flex-1 py-3 bg-gray-700 hover:bg-gray-600 text-white font-bold rounded-xl transition-colors">
+                className="flex-1 py-2.5 bg-gray-700 hover:bg-gray-600 text-white font-bold rounded-xl transition-colors text-sm">
                 עבור
               </button>
             </div>
@@ -438,24 +438,20 @@ export const GameTable: React.FC<GameTableProps> = ({
 
     return (
       <>
-        {/* Semi-transparent backdrop */}
-        <div className="absolute inset-0 z-29 bg-black/50 backdrop-blur-sm animate-fadeIn" />
+        {/* Semi-transparent backdrop - stops above the hand area */}
+        <div className="absolute inset-0 bottom-48 z-29 bg-black/40 backdrop-blur-sm animate-fadeIn" />
 
-        {/* Bottom sheet modal */}
-        <div className="absolute bottom-0 left-0 right-0 z-30 animate-slideUpBottom">
-          {/* Drag handle */}
-          <div className="flex justify-center pt-3 pb-2">
-            <div className="w-12 h-1 bg-gray-500 rounded-full" />
-          </div>
-
-          <div className="bg-[#16213e] rounded-t-3xl p-6 shadow-2xl">
-            <p className="text-center text-yellow-400 font-bold mb-6 text-lg">בחר אטו (חליפה שולטת)</p>
+        {/* Centered trump panel - positioned above the hand */}
+        <div className="absolute left-1/2 -translate-x-1/2 z-30 animate-slideUpBottom"
+          style={{ bottom: isMobile ? '210px' : '220px', width: isMobile ? '90%' : '340px' }}>
+          <div className="bg-[#16213e] rounded-2xl p-4 shadow-2xl border border-[#2a3a5e]">
+            <p className="text-center text-yellow-400 font-bold mb-4 text-base">בחר אטו (חליפה שולטת)</p>
             <div className="grid grid-cols-2 gap-3">
               {Object.values(Suit).map(suit => (
                 <button
                   key={suit}
                   onClick={() => onDeclareTrump(suit)}
-                  className="py-4 px-4 rounded-xl font-bold text-lg transition-all hover:scale-105 border-2"
+                  className="py-3 px-4 rounded-xl font-bold text-base transition-all hover:scale-105 border-2"
                   style={{
                     backgroundColor: SUIT_COLORS[suit] + '33',
                     borderColor: SUIT_COLORS[suit],
@@ -828,13 +824,6 @@ export const GameTable: React.FC<GameTableProps> = ({
               </button>
 
               <button
-                onClick={() => setShowDebug(!showDebug)}
-                className="w-full py-3 px-4 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-lg transition-colors text-right"
-              >
-                🔧 {showDebug ? 'הסתר' : 'הצג'} Debug
-              </button>
-
-              <button
                 onClick={toggleFullscreen}
                 className="w-full py-3 px-4 bg-purple-600 hover:bg-purple-500 text-white font-bold rounded-lg transition-colors text-right"
               >
@@ -956,8 +945,8 @@ export const GameTable: React.FC<GameTableProps> = ({
       <div
         className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 cursor-grab active:cursor-grabbing"
         style={{
-          width: Math.max(300, cardCount * 60),
-          height: 200,
+          width: Math.max(300, cardCount * (isMobile ? 60 : 80)),
+          height: isMobile ? 200 : 260,
         }}
         onMouseMove={handleDragMove}
         onMouseUp={handleDragEnd}
@@ -969,7 +958,7 @@ export const GameTable: React.FC<GameTableProps> = ({
           {sortedHand.map((card, i) => {
             const isPlayable = validActions.playableCards.includes(card.id);
             const isSelected = selectedCardId === card.id;
-            const isDragging = dragStateRef.current.draggedCardId === card.id;
+            const isDragging = draggingCardId === card.id;
 
             const centerIdx = (cardCount - 1) / 2;
             const offset = i - centerIdx;
@@ -982,7 +971,7 @@ export const GameTable: React.FC<GameTableProps> = ({
                 className={`absolute transition-all ${isDragging ? 'opacity-50' : ''}`}
                 style={{
                   bottom: `${yOffset}px`,
-                  left: `calc(50% + ${offset * 45}px)`,
+                  left: `calc(50% + ${offset * (isMobile ? 45 : 62)}px)`,
                   transform: `translateX(-50%) rotate(${rotation}deg) ${isSelected ? 'translateY(-20px)' : ''}`,
                   transformOrigin: 'bottom center',
                   zIndex: isSelected ? 100 : i,
@@ -994,6 +983,7 @@ export const GameTable: React.FC<GameTableProps> = ({
                   card={card}
                   playable={isPlayable && gameState.phase === GamePhase.TRICK_PLAY}
                   selected={isSelected}
+                  large={!isMobile}
                   useCustomImages={useCustomImages}
                   imageSrc={useCustomImages ? `/cards/${card.suit}/${card.rank}.png` : undefined}
                   isBiddingPhase={gameState.phase === GamePhase.BIDDING}
