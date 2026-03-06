@@ -19,10 +19,18 @@ export function getValidPlays(hand: Card[], currentTrick: { cards: { card: Card;
   
   if (cardsOfLeadSuit.length > 0) {
     // Rule 1: Must follow suit
-    // Rule 2: Must over-beat if possible
+    // Rule 2: Must over-beat if possible — BUT only if no trump has been played
+    // If someone already trumped, you just follow suit (no obligation to beat)
+    const trumpAlreadyPlayed = trumpSuit && currentTrick.cards.some(c => c.card.suit === trumpSuit && c.card.suit !== leadSuit);
+
+    if (trumpAlreadyPlayed) {
+      // Trump was played by someone — just follow suit, no need to beat
+      return cardsOfLeadSuit;
+    }
+
     const highestLeadPower = getHighestPowerInTrick(currentTrick.cards, leadSuit);
     const higherCards = cardsOfLeadSuit.filter(c => CARD_POWER[c.rank] > highestLeadPower);
-    
+
     if (higherCards.length > 0) {
       return higherCards; // Must play a higher card of lead suit
     }
