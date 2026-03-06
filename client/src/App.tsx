@@ -22,15 +22,26 @@ function AppContent() {
   const [urlRoomCode, setUrlRoomCode] = useState<string | null>(null);
   const [showProfile, setShowProfile] = useState(false);
 
+  // Safety fallback: if user exists but profile never resolves after 3s,
+  // force the nickname screen so the user isn't stuck forever
+  const [profileTimeout, setProfileTimeout] = useState(false);
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const room = params.get('room');
     if (room) {
       setUrlRoomCode(room.toUpperCase());
-      // Clean the URL without reloading
       window.history.replaceState({}, '', window.location.pathname);
     }
   }, []);
+
+  useEffect(() => {
+    if (user && !profile && !needsNickname && !loading) {
+      const t = setTimeout(() => setProfileTimeout(true), 3000);
+      return () => clearTimeout(t);
+    }
+    setProfileTimeout(false);
+  }, [user, profile, needsNickname, loading]);
 
   // Loading auth state
   if (loading) {
@@ -52,6 +63,22 @@ function AppContent() {
   // Authenticated but no profile - show nickname screen
   if (user && needsNickname) {
     return <NicknameScreen />;
+  }
+
+  // User exists but profile isn't resolved yet (fetchProfile still in-flight)
+  // Show a brief loading screen; after 3s fallback to NicknameScreen
+  if (user && !profile) {
+    if (profileTimeout) {
+      return <NicknameScreen />;
+    }
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#0d1117]">
+        <div className="text-center">
+          <div className="text-4xl mb-4 animate-spin">🃏</div>
+          <p className="text-gray-400">טוען פרופיל...</p>
+        </div>
+      </div>
+    );
   }
 
   // Show profile page if requested

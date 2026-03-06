@@ -73,12 +73,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       try {
         if (session?.user) {
-          setUser(session.user);
+          // Resolve profile BEFORE updating any state to avoid
+          // intermediate renders where user is set but profile status is unknown
           const profileData = await fetchProfile(session.user.id);
+          // Batch all state updates together
+          setUser(session.user);
           if (profileData) {
             setProfile(profileData);
             setNeedsNickname(false);
           } else {
+            setProfile(null);
             setNeedsNickname(true);
           }
         } else {
