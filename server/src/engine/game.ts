@@ -110,6 +110,7 @@ export function placeBid(state: GameState, seat: SeatPosition, amount: number): 
   if (state.phase !== GamePhase.BIDDING) return state;
   if (state.currentTurnSeat !== seat) return state;
   if (amount !== 0 && amount < 70) return state;
+  if (amount !== 0 && amount % 10 !== 0) return state; // Must be multiple of 10
   if (amount !== 0 && amount <= state.currentBidAmount) return state;
   if (amount > 230) return state;
   
@@ -270,20 +271,41 @@ function startTrickPhase(state: GameState) {
 }
 
 export function playCard(state: GameState, seat: SeatPosition, cardId: string): GameState {
-  if (state.phase !== GamePhase.TRICK_PLAY) return state;
-  if (state.currentTurnSeat !== seat) return state;
-  
+  if (state.phase !== GamePhase.TRICK_PLAY) {
+    console.log(`[playCard] REJECTED: phase is ${state.phase}, not TRICK_PLAY. seat=${seat}, cardId=${cardId}`);
+    return state;
+  }
+  if (state.currentTurnSeat !== seat) {
+    console.log(`[playCard] REJECTED: not ${seat}'s turn, current turn is ${state.currentTurnSeat}. cardId=${cardId}`);
+    return state;
+  }
+
   const player = state.players[seat];
   if (!player) return state;
-  
+
   const cardIndex = player.hand.findIndex(c => c.id === cardId);
-  if (cardIndex === -1) return state;
-  
+  if (cardIndex === -1) {
+    console.log(`[playCard] REJECTED: card ${cardId} not in ${seat}'s hand. Hand: ${player.hand.map(c=>c.id).join(',')}`);
+    return state;
+  }
+
   const card = player.hand[cardIndex];
-  
+
   // Validate the play
   const validPlays = getValidPlays(player.hand, state.currentTrick, state.trumpSuit);
-  if (!validPlays.some(c => c.id === cardId)) return state;
+  console.log(`[playCard] seat=${seat}, card=${cardId}, validPlays=[${validPlays.map(c=>c.id).join(',')}], trickCards=[${state.currentTrick.cards.map(tc=>`${tc.seat}:${tc.card.id}`).join(',')}], trump=${state.trumpSuit}`);
+
+  if (!validPlays.some(c => c.id === cardId)) {
+    // Safety fallback: if valid plays returned empty or doesn't include ANY hand card, allow the play
+    const handIds = new Set(player.hand.map(c => c.id));
+    const anyValidInHand = validPlays.some(c => handIds.has(c.id));
+    if (!anyValidInHand) {
+      console.log(`[playCard] WARNING: getValidPlays returned no cards in hand! Allowing play as fallback.`);
+    } else {
+      console.log(`[playCard] REJECTED: ${cardId} not in valid plays`);
+      return state;
+    }
+  }
   
   // Play the card
   player.hand.splice(cardIndex, 1);
@@ -535,7 +557,7 @@ function getValidActions(state: GameState, seat: SeatPosition): ValidActions {
   if (state.phase === GamePhase.BIDDING && state.currentTurnSeat === seat) {
     actions.canBid = true;
     actions.canPass = true;
-    actions.minBid = Math.max(70, state.currentBidAmount + 1);
+    actions.minBid = Math.max(70, state.currentBidAmount + 10); // increments of 10
     actions.canDeclareCapo = true;
   }
   

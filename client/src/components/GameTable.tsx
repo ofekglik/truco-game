@@ -31,8 +31,18 @@ export const GameTable: React.FC<GameTableProps> = ({
 }) => {
   const [bidAmount, setBidAmount] = useState(70);
   const [showScoreboard, setShowScoreboard] = useState(false);
+  const [showDebug, setShowDebug] = useState(false);
+  const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
   const { validActions } = gameState;
   const isMyTurn = gameState.currentTurnSeat === gameState.mySeat;
+
+  // Find the full card object for the selected card
+  const selectedCard = selectedCardId ? gameState.myHand.find(c => c.id === selectedCardId) : null;
+  // Clear selection if it's no longer our turn or the card left our hand
+  if (selectedCardId && (!isMyTurn || !selectedCard)) {
+    // use a timeout to avoid setState during render
+    setTimeout(() => setSelectedCardId(null), 0);
+  }
 
   // Sort hand by suit then rank
   const sortedHand = [...gameState.myHand].sort((a, b) => {
@@ -101,21 +111,26 @@ export const GameTable: React.FC<GameTableProps> = ({
       <div className="absolute bottom-44 left-1/2 -translate-x-1/2 z-30 bg-[#16213e]/95 border border-[#4a5a7e] rounded-xl p-4 shadow-xl backdrop-blur-sm">
         <p className="text-center text-yellow-400 font-bold mb-3">הצעה שלך</p>
         <div className="flex items-center gap-3 mb-3" dir="ltr">
-          <button onClick={() => setBidAmount(Math.max(validActions.minBid, bidAmount - 5))}
+          <button onClick={() => setBidAmount(Math.max(validActions.minBid, bidAmount - 10))}
             className="w-10 h-10 rounded-lg bg-[#2a3a5e] hover:bg-[#3a4a6e] text-white text-xl font-bold">−</button>
           <input
             type="number"
             value={bidAmount}
-            onChange={e => setBidAmount(Math.max(validActions.minBid, Math.min(229, Number(e.target.value))))}
+            onChange={e => {
+              const raw = Number(e.target.value);
+              const rounded = Math.round(raw / 10) * 10;
+              setBidAmount(Math.max(validActions.minBid, Math.min(220, rounded)));
+            }}
             className="w-20 h-10 text-center text-2xl font-bold bg-[#0a0a1a] text-yellow-400 rounded-lg border border-[#4a5a7e]"
             min={validActions.minBid}
-            max={229}
+            max={220}
+            step={10}
           />
-          <button onClick={() => setBidAmount(Math.min(229, bidAmount + 5))}
+          <button onClick={() => setBidAmount(Math.min(220, bidAmount + 10))}
             className="w-10 h-10 rounded-lg bg-[#2a3a5e] hover:bg-[#3a4a6e] text-white text-xl font-bold">+</button>
         </div>
         <div className="flex gap-2">
-          <button onClick={() => { onPlaceBid(bidAmount); setBidAmount(Math.max(70, bidAmount + 1)); }}
+          <button onClick={() => { onPlaceBid(bidAmount); setBidAmount(Math.max(70, bidAmount + 10)); }}
             className="flex-1 py-2 bg-yellow-600 hover:bg-yellow-500 text-black font-bold rounded-lg">
             קנה ({bidAmount})
           </button>
@@ -160,28 +175,35 @@ export const GameTable: React.FC<GameTableProps> = ({
   };
 
   const renderSingingPanel = () => {
-    if (gameState.phase !== GamePhase.SINGING || !validActions.canSing) return null;
-    
+    // Show singing panel to bidding team members during singing phase
+    const isBiddingTeam = gameState.biddingTeam && SEAT_TEAM[gameState.mySeat] === gameState.biddingTeam;
+    if (gameState.phase !== GamePhase.SINGING || !isBiddingTeam) return null;
+
     return (
       <div className="absolute bottom-44 left-1/2 -translate-x-1/2 z-30 bg-[#16213e]/95 border border-[#4a5a7e] rounded-xl p-4 shadow-xl backdrop-blur-sm">
         <p className="text-center text-yellow-400 font-bold mb-3">שירה</p>
-        <div className="space-y-2 mb-3">
-          {validActions.singableCantes.map(suit => (
-            <button
-              key={suit}
-              onClick={() => onSingCante(suit)}
-              className="w-full py-2 px-4 rounded-lg font-bold transition-colors hover:scale-105"
-              style={{
-                backgroundColor: SUIT_COLORS[suit] + '33',
-                borderColor: SUIT_COLORS[suit],
-                borderWidth: '2px',
-                color: SUIT_COLORS[suit],
-              }}
-            >
-              שר {SUIT_SYMBOLS[suit]} {SUIT_NAMES_HE[suit]} ({suit === gameState.trumpSuit ? '40' : '20'} נק׳)
-            </button>
-          ))}
-        </div>
+        {validActions.singableCantes.length > 0 && (
+          <div className="space-y-2 mb-3">
+            {validActions.singableCantes.map(suit => (
+              <button
+                key={suit}
+                onClick={() => onSingCante(suit)}
+                className="w-full py-2 px-4 rounded-lg font-bold transition-colors hover:scale-105"
+                style={{
+                  backgroundColor: SUIT_COLORS[suit] + '33',
+                  borderColor: SUIT_COLORS[suit],
+                  borderWidth: '2px',
+                  color: SUIT_COLORS[suit],
+                }}
+              >
+                שר {SUIT_SYMBOLS[suit]} {SUIT_NAMES_HE[suit]} ({suit === gameState.trumpSuit ? '40' : '20'} נק׳)
+              </button>
+            ))}
+          </div>
+        )}
+        {validActions.singableCantes.length === 0 && (
+          <p className="text-center text-gray-400 text-sm mb-3">אין שירה אפשרית</p>
+        )}
         <button onClick={onDoneSinging}
           className="w-full py-2 bg-gray-700 hover:bg-gray-600 text-white font-bold rounded-lg">
           סיים שירה
@@ -325,19 +347,46 @@ export const GameTable: React.FC<GameTableProps> = ({
         <div className="flex items-end justify-center" style={{ gap: '-0.25rem' }}>
           {sortedHand.map((card, i) => {
             const isPlayable = validActions.playableCards.includes(card.id);
+            const isSelected = selectedCardId === card.id;
             const offset = (i - sortedHand.length / 2) * 2;
             return (
               <div key={card.id} style={{ marginLeft: i > 0 ? '-0.5rem' : '0', transform: `rotate(${offset}deg)` }}>
                 <CardComponent
                   card={card}
                   playable={isPlayable && gameState.phase === GamePhase.TRICK_PLAY}
-                  onClick={() => onPlayCard(card.id)}
+                  selected={isSelected}
+                  onClick={() => {
+                    if (gameState.phase === GamePhase.TRICK_PLAY) {
+                      setSelectedCardId(isSelected ? null : card.id);
+                    }
+                  }}
                 />
               </div>
             );
           })}
         </div>
       </div>
+
+      {/* Card confirmation popup */}
+      {selectedCard && gameState.phase === GamePhase.TRICK_PLAY && (
+        <div className="absolute bottom-36 left-1/2 -translate-x-1/2 z-30 flex flex-col items-center gap-2 animate-fade-in">
+          <div className="bg-[#16213e]/95 border border-yellow-500 rounded-xl p-3 shadow-xl backdrop-blur-sm flex items-center gap-3">
+            <CardComponent card={selectedCard} small />
+            <div className="flex flex-col gap-2">
+              <button
+                onClick={() => { onPlayCard(selectedCard.id); setSelectedCardId(null); }}
+                className="px-5 py-2 bg-yellow-500 hover:bg-yellow-400 text-black font-bold rounded-lg text-sm transition-colors">
+                שחק
+              </button>
+              <button
+                onClick={() => setSelectedCardId(null)}
+                className="px-5 py-1.5 bg-gray-700 hover:bg-gray-600 text-gray-200 font-medium rounded-lg text-xs transition-colors">
+                ביטול
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       
       {/* My name */}
       <div className="absolute bottom-32 left-1/2 -translate-x-1/2 z-20">
@@ -362,6 +411,24 @@ export const GameTable: React.FC<GameTableProps> = ({
           <div onClick={e => e.stopPropagation()}>
             <Scoreboard gameState={gameState} onClose={() => setShowScoreboard(false)} />
           </div>
+        </div>
+      )}
+
+      {/* Debug toggle */}
+      <button onClick={() => setShowDebug(!showDebug)}
+        className="absolute bottom-2 right-2 z-50 text-[10px] text-gray-600 hover:text-white">
+        DBG
+      </button>
+      {showDebug && (
+        <div className="absolute bottom-8 right-2 z-50 bg-black/90 text-[10px] text-green-400 p-2 rounded font-mono max-w-xs max-h-48 overflow-auto" dir="ltr">
+          <div>phase: {gameState.phase}</div>
+          <div>mySeat: {gameState.mySeat}</div>
+          <div>turn: {gameState.currentTurnSeat}</div>
+          <div>isMyTurn: {String(isMyTurn)}</div>
+          <div>trick#{gameState.trickNumber} cards: {gameState.currentTrick.cards.map(tc => `${tc.seat}:${tc.card.id}`).join(', ') || 'none'}</div>
+          <div>trump: {gameState.trumpSuit || 'none'}</div>
+          <div>playable: [{validActions.playableCards.join(', ')}]</div>
+          <div>hand: [{gameState.myHand.map(c => c.id).join(', ')}]</div>
         </div>
       )}
     </div>
