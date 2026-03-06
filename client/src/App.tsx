@@ -10,6 +10,7 @@ function App() {
     connected, gameState, roomInfo, error,
     createRoom, joinRoom, startGame,
     placeBid, passBid, declareTrump, singCante, doneSinging, playCard, nextRound,
+    swapSeat, updateSettings,
   } = useSocket();
 
   // Not in a room yet
@@ -19,7 +20,15 @@ function App() {
 
   // In room but game hasn't started
   if (gameState && gameState.phase === GamePhase.WAITING) {
-    return <WaitingRoom gameState={gameState} roomCode={roomInfo.roomCode} onStartGame={startGame} />;
+    return (
+      <WaitingRoom
+        gameState={gameState}
+        roomCode={roomInfo.roomCode}
+        onStartGame={startGame}
+        onSwapSeat={swapSeat}
+        onUpdateSettings={updateSettings}
+      />
+    );
   }
 
   // Game is active
@@ -40,7 +49,7 @@ function App() {
 
   // Loading
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#1a1a2e]">
+    <div className="min-h-screen flex items-center justify-center bg-[#0d1117]">
       <div className="text-center">
         <div className="text-4xl mb-4 animate-spin">🃏</div>
         <p className="text-gray-400">טוען...</p>

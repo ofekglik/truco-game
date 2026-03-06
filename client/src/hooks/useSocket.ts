@@ -45,8 +45,8 @@ export function useSocket() {
     };
   }, []);
 
-  const createRoom = useCallback((name: string) => {
-    socketRef.current?.emit('createRoom', name);
+  const createRoom = useCallback((name: string, targetScore?: number) => {
+    socketRef.current?.emit('createRoom', name, targetScore);
   }, []);
 
   const joinRoom = useCallback((code: string, name: string) => {
@@ -85,6 +85,14 @@ export function useSocket() {
     socketRef.current?.emit('nextRound');
   }, []);
 
+  const swapSeat = useCallback((targetSeat: SeatPosition) => {
+    socketRef.current?.emit('swapSeat', targetSeat);
+  }, []);
+
+  const updateSettings = useCallback((settings: { targetScore: number }) => {
+    socketRef.current?.emit('updateSettings', settings);
+  }, []);
+
   return {
     connected,
     gameState,
@@ -100,5 +108,7 @@ export function useSocket() {
     doneSinging,
     playCard,
     nextRound,
+    swapSeat,
+    updateSettings,
   };
 }

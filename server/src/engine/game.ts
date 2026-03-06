@@ -23,6 +23,7 @@ export function createInitialState(): GameState {
     capoDeclarerSeat: null,
     cantes: [],
     singingDone: false,
+    singingAfterTrick: false,
     currentTrick: { cards: [], leadSeat: 'east' },
     completedTricks: [],
     trickNumber: 0,
@@ -31,6 +32,7 @@ export function createInitialState(): GameState {
     scores: { team1: 0, team2: 0 },
     roundHistory: [],
     roundNumber: 0,
+    targetScore: 1000,
     lastMessage: 'ממתינים לשחקנים...',
   };
 }
@@ -66,6 +68,7 @@ export function startRound(state: GameState): GameState {
   state.capoDeclarerSeat = null;
   state.cantes = [];
   state.singingDone = false;
+  state.singingAfterTrick = false;
   state.currentTrick = { cards: [], leadSeat: firstPlayer };
   state.completedTricks = [];
   state.trickNumber = 0;
@@ -173,33 +176,13 @@ export function placeBid(state: GameState, seat: SeatPosition, amount: number): 
 export function declareTrump(state: GameState, seat: SeatPosition, suit: Suit): GameState {
   if (state.phase !== GamePhase.TRUMP_DECLARATION) return state;
   if (state.currentTurnSeat !== seat) return state;
-  
+
   state.trumpSuit = suit;
-  
-  // Check if singing is relevant (bid >= 80)
-  if (state.currentBidAmount >= 80 || state.capoType !== CapoType.NONE) {
-    state.phase = GamePhase.SINGING;
-    // Start singing with the first player of the bidding team after dealer
-    let singingSeat = getNextSeat(state.dealerSeat);
-    // Find first bidding team member
-    for (let i = 0; i < 4; i++) {
-      if (SEAT_TEAM[singingSeat] === state.biddingTeam) break;
-      singingSeat = getNextSeat(singingSeat);
-    }
-    state.currentTurnSeat = singingSeat;
-    
-    // Check if anyone can actually sing
-    const canAnySing = checkAnySinging(state);
-    if (!canAnySing) {
-      state.singingDone = true;
-      startTrickPhase(state);
-    } else {
-      state.lastMessage = `אטו: ${SUIT_NAMES_HE[suit]}. שלב שירה.`;
-    }
-  } else {
-    startTrickPhase(state);
-  }
-  
+  state.lastMessage = `אטו: ${SUIT_NAMES_HE[suit]}.`;
+
+  // After trump is declared, go directly to trick play
+  startTrickPhase(state);
+
   return state;
 }
 
@@ -210,6 +193,18 @@ function checkAnySinging(state: GameState): boolean {
     const player = state.players[seat];
     if (!player) continue;
     const singable = getSingableSuits(player.hand, state.trumpSuit, state.currentBidAmount, state.cantes, seat, state.biddingTeam);
+    if (singable.length > 0) return true;
+  }
+  return false;
+}
+
+function checkAnySingingForTeam(state: GameState, team: TeamId): boolean {
+  if (!state.trumpSuit) return false;
+  for (const seat of SEAT_ORDER) {
+    if (SEAT_TEAM[seat] !== team) continue;
+    const player = state.players[seat];
+    if (!player) continue;
+    const singable = getSingableSuits(player.hand, state.trumpSuit, state.currentBidAmount, state.cantes, seat, team);
     if (singable.length > 0) return true;
   }
   return false;
@@ -238,7 +233,7 @@ export function singCante(state: GameState, seat: SeatPosition, suit: Suit): Gam
 export function doneSinging(state: GameState, seat: SeatPosition): GameState {
   if (state.phase !== GamePhase.SINGING) return state;
   if (SEAT_TEAM[seat] !== state.biddingTeam) return state;
-  
+
   // Move to next bidding team member
   let nextSeat = getNextSeat(seat);
   for (let i = 0; i < 3; i++) {
@@ -254,10 +249,23 @@ export function doneSinging(state: GameState, seat: SeatPosition): GameState {
     }
     nextSeat = getNextSeat(nextSeat);
   }
-  
+
   // No more singing
   state.singingDone = true;
-  startTrickPhase(state);
+
+  // If this was singing-after-trick, resume trick play with next trick
+  if (state.singingAfterTrick) {
+    state.singingAfterTrick = false;
+    state.phase = GamePhase.TRICK_PLAY;
+    const lastTrick = state.completedTricks[state.completedTricks.length - 1];
+    if (lastTrick && lastTrick.winnerSeat) {
+      // Winner leads next trick
+      state.trickNumber++;
+      state.currentTurnSeat = lastTrick.winnerSeat;
+      state.currentTrick = { cards: [], leadSeat: lastTrick.winnerSeat };
+    }
+  }
+
   return state;
 }
 
@@ -316,18 +324,18 @@ export function playCard(state: GameState, seat: SeatPosition, cardId: string): 
     const winner = determineTrickWinner(state.currentTrick, state.trumpSuit);
     state.currentTrick.winnerSeat = winner.seat;
     state.completedTricks.push({ ...state.currentTrick });
-    
+
     const winnerTeam = SEAT_TEAM[winner.seat];
     if (winnerTeam === 'team1') state.team1TricksWon++;
     else state.team2TricksWon++;
-    
+
     state.lastMessage = `${state.players[winner.seat]?.name} לקח את הלקיחה`;
-    
+
     // Check for technical capo - only need first trick
     if (state.capoType === CapoType.TECHNICAL && state.completedTricks.length === 1) {
       return endRound(state);
     }
-    
+
     // Check for bid capo - if they lost a trick, end
     if (state.capoType === CapoType.BID) {
       const capoTeam = state.biddingTeam!;
@@ -337,12 +345,38 @@ export function playCard(state: GameState, seat: SeatPosition, cardId: string): 
         return endRound(state);
       }
     }
-    
+
     // Check if all tricks played
     if (state.completedTricks.length === 10) {
       return endRound(state);
     }
-    
+
+    // Check if winner is on bidding team and can sing
+    if (state.biddingTeam && winnerTeam === state.biddingTeam && state.trumpSuit) {
+      const canAnySing = checkAnySingingForTeam(state, state.biddingTeam);
+      if (canAnySing) {
+        // Enter singing phase after trick
+        state.phase = GamePhase.SINGING;
+        state.singingAfterTrick = true;
+        // Find first bidding team member who can sing
+        let singingSeat = winner.seat;
+        for (let i = 0; i < 4; i++) {
+          if (SEAT_TEAM[singingSeat] === state.biddingTeam) {
+            const player = state.players[singingSeat];
+            if (player && state.trumpSuit) {
+              const singable = getSingableSuits(player.hand, state.trumpSuit, state.currentBidAmount, state.cantes, singingSeat, state.biddingTeam);
+              if (singable.length > 0) {
+                state.currentTurnSeat = singingSeat;
+                state.lastMessage = `${state.players[singingSeat]?.name} יכול לשיר!`;
+                return state;
+              }
+            }
+          }
+          singingSeat = getNextSeat(singingSeat);
+        }
+      }
+    }
+
     // Next trick
     state.trickNumber++;
     state.currentTurnSeat = winner.seat;
@@ -357,141 +391,175 @@ export function playCard(state: GameState, seat: SeatPosition, cardId: string): 
 
 function endRound(state: GameState): GameState {
   state.phase = GamePhase.ROUND_SCORING;
-  
+
   const singingPoints = { team1: 0, team2: 0 };
   for (const cante of state.cantes) {
     const team = SEAT_TEAM[cante.seat];
     singingPoints[team] += cante.points;
   }
-  
+
   let team1TrickPts = 0;
   let team2TrickPts = 0;
-  
+
   for (let i = 0; i < state.completedTricks.length; i++) {
     const trick = state.completedTricks[i];
     const winner = determineTrickWinner(trick, state.trumpSuit);
     const pts = calculateTrickPoints(trick);
     const lastTrickBonus = (i === state.completedTricks.length - 1 && state.completedTricks.length === 10) ? 10 : 0;
-    
+
     if (SEAT_TEAM[winner.seat] === 'team1') {
       team1TrickPts += pts + lastTrickBonus;
     } else {
       team2TrickPts += pts + lastTrickBonus;
     }
   }
-  
+
   // Handle capo scoring
   if (state.capoType === CapoType.TECHNICAL) {
     const capoTeam = state.biddingTeam!;
     const firstTrickWinner = state.completedTricks[0] ? determineTrickWinner(state.completedTricks[0], state.trumpSuit) : null;
-    
-    if (firstTrickWinner && SEAT_TEAM[firstTrickWinner.seat] === capoTeam) {
-      if (capoTeam === 'team1') { team1TrickPts = 230; team2TrickPts = 0; }
-      else { team2TrickPts = 230; team1TrickPts = 0; }
-      singingPoints.team1 = 0; singingPoints.team2 = 0;
+    const capoSucceeded = firstTrickWinner && SEAT_TEAM[firstTrickWinner.seat] === capoTeam;
+
+    if (capoSucceeded) {
+      // Capo succeeded: bidding team gets 230, other team gets 0
+      if (capoTeam === 'team1') {
+        state.scores.team1 += 230;
+      } else {
+        state.scores.team2 += 230;
+      }
     } else {
-      if (capoTeam === 'team1') { team1TrickPts = 0; }
-      else { team2TrickPts = 0; }
+      // Capo failed: other team gets 230, bidding team gets 0
+      if (capoTeam === 'team1') {
+        state.scores.team2 += 230;
+      } else {
+        state.scores.team1 += 230;
+      }
     }
-    
+
     const roundScore: RoundScore = {
       team1TrickPoints: team1TrickPts,
       team2TrickPoints: team2TrickPts,
       team1SingingPoints: 0,
       team2SingingPoints: 0,
-      team1Total: team1TrickPts,
-      team2Total: team2TrickPts,
+      team1Total: capoTeam === 'team1' && capoSucceeded ? 230 : (capoTeam === 'team2' ? 0 : 230),
+      team2Total: capoTeam === 'team2' && capoSucceeded ? 230 : (capoTeam === 'team1' ? 0 : 230),
       biddingTeam: state.biddingTeam,
       bidAmount: 230,
-      biddingTeamFell: firstTrickWinner ? SEAT_TEAM[firstTrickWinner.seat] !== capoTeam : true,
+      biddingTeamFell: !capoSucceeded,
     };
-    
-    state.scores.team1 += roundScore.team1Total;
-    state.scores.team2 += roundScore.team2Total;
+
     state.roundHistory.push(roundScore);
-    state.lastMessage = roundScore.biddingTeamFell ? 'קאפו טכני נכשל!' : 'קאפו טכני הצליח! 230 נקודות!';
+    state.lastMessage = capoSucceeded ? 'קאפו טכני הצליח! 230 נקודות!' : 'קאפו טכני נכשל!';
+
+    // Check if any team reached target score
+    if (state.scores.team1 >= state.targetScore || state.scores.team2 >= state.targetScore) {
+      state.phase = GamePhase.GAME_OVER;
+    }
+
     return state;
   }
-  
+
   if (state.capoType === CapoType.BID) {
     const capoTeam = state.biddingTeam!;
     const otherTeam = capoTeam === 'team1' ? 'team2' : 'team1';
     const otherWon = otherTeam === 'team1' ? state.team1TricksWon : state.team2TricksWon;
-    
-    if (otherWon === 0) {
-      // Bid capo succeeded
-      if (capoTeam === 'team1') { team1TrickPts = 230; team2TrickPts = 0; }
-      else { team2TrickPts = 230; team1TrickPts = 0; }
+    const capoSucceeded = otherWon === 0;
+
+    if (capoSucceeded) {
+      // Bid capo succeeded: bidding team gets 230, other team gets 0
+      if (capoTeam === 'team1') {
+        state.scores.team1 += 230;
+      } else {
+        state.scores.team2 += 230;
+      }
     } else {
-      // Bid capo failed
-      if (capoTeam === 'team1') { team1TrickPts = 0; }
-      else { team2TrickPts = 0; }
+      // Bid capo failed: other team gets 230, bidding team gets 0
+      if (capoTeam === 'team1') {
+        state.scores.team2 += 230;
+      } else {
+        state.scores.team1 += 230;
+      }
     }
-    singingPoints.team1 = 0; singingPoints.team2 = 0;
-    
+
     const roundScore: RoundScore = {
       team1TrickPoints: team1TrickPts,
       team2TrickPoints: team2TrickPts,
       team1SingingPoints: 0,
       team2SingingPoints: 0,
-      team1Total: team1TrickPts,
-      team2Total: team2TrickPts,
+      team1Total: capoTeam === 'team1' && capoSucceeded ? 230 : (capoTeam === 'team2' ? 0 : 230),
+      team2Total: capoTeam === 'team2' && capoSucceeded ? 230 : (capoTeam === 'team1' ? 0 : 230),
       biddingTeam: state.biddingTeam,
       bidAmount: 230,
-      biddingTeamFell: otherWon > 0,
+      biddingTeamFell: !capoSucceeded,
     };
-    
-    state.scores.team1 += roundScore.team1Total;
-    state.scores.team2 += roundScore.team2Total;
+
     state.roundHistory.push(roundScore);
-    state.lastMessage = roundScore.biddingTeamFell ? 'קאפו נכשל!' : 'קאפו הצליח! 230 נקודות!';
+    state.lastMessage = capoSucceeded ? 'קאפו הצליח! 230 נקודות!' : 'קאפו נכשל!';
+
+    // Check if any team reached target score
+    if (state.scores.team1 >= state.targetScore || state.scores.team2 >= state.targetScore) {
+      state.phase = GamePhase.GAME_OVER;
+    }
+
     return state;
   }
-  
+
   // Normal scoring
   const team1Total = team1TrickPts + singingPoints.team1;
   const team2Total = team2TrickPts + singingPoints.team2;
-  
-  let biddingTeamFell = false;
+
+  let team1FinalScore = 0;
+  let team2FinalScore = 0;
+
   const bidTeam = state.biddingTeam!;
   const bidTeamTotal = bidTeam === 'team1' ? team1Total : team2Total;
-  
-  if (bidTeamTotal < state.currentBidAmount) {
-    biddingTeamFell = true;
-    // Bidding team scores 0
+  const biddingTeamFell = bidTeamTotal < state.currentBidAmount;
+
+  if (biddingTeamFell) {
+    // Bidding team fell: other team scores the bid amount
     if (bidTeam === 'team1') {
-      const roundScore: RoundScore = {
-        team1TrickPoints: team1TrickPts, team2TrickPoints: team2TrickPts,
-        team1SingingPoints: singingPoints.team1, team2SingingPoints: singingPoints.team2,
-        team1Total: 0, team2Total: team2Total,
-        biddingTeam: bidTeam, bidAmount: state.currentBidAmount, biddingTeamFell: true,
-      };
-      state.scores.team2 += team2Total;
-      state.roundHistory.push(roundScore);
+      team2FinalScore = state.currentBidAmount;
+      state.scores.team2 += team2FinalScore;
     } else {
-      const roundScore: RoundScore = {
-        team1TrickPoints: team1TrickPts, team2TrickPoints: team2TrickPts,
-        team1SingingPoints: singingPoints.team1, team2SingingPoints: singingPoints.team2,
-        team1Total: team1Total, team2Total: 0,
-        biddingTeam: bidTeam, bidAmount: state.currentBidAmount, biddingTeamFell: true,
-      };
-      state.scores.team1 += team1Total;
-      state.roundHistory.push(roundScore);
+      team1FinalScore = state.currentBidAmount;
+      state.scores.team1 += team1FinalScore;
     }
+  } else {
+    // Bidding team succeeded: bidding team scores the bid amount, other team scores 0
+    if (bidTeam === 'team1') {
+      team1FinalScore = state.currentBidAmount;
+      state.scores.team1 += team1FinalScore;
+    } else {
+      team2FinalScore = state.currentBidAmount;
+      state.scores.team2 += team2FinalScore;
+    }
+  }
+
+  const roundScore: RoundScore = {
+    team1TrickPoints: team1TrickPts,
+    team2TrickPoints: team2TrickPts,
+    team1SingingPoints: singingPoints.team1,
+    team2SingingPoints: singingPoints.team2,
+    team1Total: team1FinalScore,
+    team2Total: team2FinalScore,
+    biddingTeam: bidTeam,
+    bidAmount: state.currentBidAmount,
+    biddingTeamFell,
+  };
+
+  state.roundHistory.push(roundScore);
+
+  if (biddingTeamFell) {
     state.lastMessage = `הקבוצה המציעה נפלה! (${bidTeamTotal}/${state.currentBidAmount})`;
   } else {
-    const roundScore: RoundScore = {
-      team1TrickPoints: team1TrickPts, team2TrickPoints: team2TrickPts,
-      team1SingingPoints: singingPoints.team1, team2SingingPoints: singingPoints.team2,
-      team1Total: team1Total, team2Total: team2Total,
-      biddingTeam: bidTeam, bidAmount: state.currentBidAmount, biddingTeamFell: false,
-    };
-    state.scores.team1 += team1Total;
-    state.scores.team2 += team2Total;
-    state.roundHistory.push(roundScore);
-    state.lastMessage = `סיום סיבוב. קבוצה 1: ${team1Total}, קבוצה 2: ${team2Total}`;
+    state.lastMessage = `סיום סיבוב. קבוצה 1: ${team1FinalScore}, קבוצה 2: ${team2FinalScore}`;
   }
-  
+
+  // Check if any team reached target score
+  if (state.scores.team1 >= state.targetScore || state.scores.team2 >= state.targetScore) {
+    state.phase = GamePhase.GAME_OVER;
+  }
+
   return state;
 }
 
@@ -503,13 +571,13 @@ export function nextRound(state: GameState): GameState {
 export function getClientState(state: GameState, seat: SeatPosition): ClientGameState {
   const player = state.players[seat];
   const validActions = getValidActions(state, seat);
-  
+
   const players: ClientGameState['players'] = {} as any;
   for (const s of SEAT_ORDER) {
     const p = state.players[s];
     players[s] = p ? { name: p.name, cardCount: p.hand.length, connected: p.connected } : null;
   }
-  
+
   return {
     phase: state.phase,
     myHand: player?.hand || [],
@@ -534,6 +602,8 @@ export function getClientState(state: GameState, seat: SeatPosition): ClientGame
     scores: state.scores,
     roundHistory: state.roundHistory,
     roundNumber: state.roundNumber,
+    targetScore: state.targetScore,
+    roomSettings: { targetScore: state.targetScore },
     lastMessage: state.lastMessage,
     validActions,
   };
@@ -550,33 +620,36 @@ function getValidActions(state: GameState, seat: SeatPosition): ValidActions {
     playableCards: [],
     canDeclareCapo: false,
   };
-  
+
   const player = state.players[seat];
   if (!player) return actions;
-  
+
   if (state.phase === GamePhase.BIDDING && state.currentTurnSeat === seat) {
     actions.canBid = true;
     actions.canPass = true;
     actions.minBid = Math.max(70, state.currentBidAmount + 10); // increments of 10
     actions.canDeclareCapo = true;
   }
-  
+
   if (state.phase === GamePhase.TRUMP_DECLARATION && state.currentTurnSeat === seat) {
     actions.canDeclareTrump = true;
   }
-  
+
   if (state.phase === GamePhase.SINGING && state.biddingTeam && SEAT_TEAM[seat] === state.biddingTeam) {
-    const singable = getSingableSuits(
-      player.hand, state.trumpSuit!, state.currentBidAmount, state.cantes, seat, state.biddingTeam
-    );
-    actions.canSing = singable.length > 0;
-    actions.singableCantes = singable;
+    // Allow singing if it's the current player's turn or if it's singing-after-trick
+    if (state.singingAfterTrick || state.currentTurnSeat === seat) {
+      const singable = getSingableSuits(
+        player.hand, state.trumpSuit!, state.currentBidAmount, state.cantes, seat, state.biddingTeam
+      );
+      actions.canSing = singable.length > 0;
+      actions.singableCantes = singable;
+    }
   }
-  
+
   if (state.phase === GamePhase.TRICK_PLAY && state.currentTurnSeat === seat) {
     const valid = getValidPlays(player.hand, state.currentTrick, state.trumpSuit);
     actions.playableCards = valid.map(c => c.id);
   }
-  
+
   return actions;
 }

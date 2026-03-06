@@ -5,12 +5,12 @@ import cors from 'cors';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import {
-  createRoom, joinRoom, getRoom, getRoomByCode, removePlayer, isRoomFull, type Room
+  createRoom, joinRoom, getRoom, getRoomByCode, removePlayer, isRoomFull, swapSeat, updateRoomSettings, type Room
 } from './rooms/roomManager.js';
 import {
   startRound, placeBid, declareTrump, singCante, doneSinging, playCard, nextRound, getClientState
 } from './engine/game.js';
-import { GamePhase, SEAT_ORDER, Suit } from './engine/types.js';
+import { GamePhase, SEAT_ORDER, SeatPosition, Suit } from './engine/types.js';
 
 const app = express();
 app.use(cors());
@@ -66,11 +66,15 @@ io.on('connection', (socket) => {
     console.log(`[rejoinRoom] success: ${playerName} back in seat ${result.seat}`);
   });
 
-  socket.on('createRoom', (playerName: string) => {
+  socket.on('createRoom', (playerName: string, targetScore?: number) => {
     const result = createRoom(socket.id, playerName);
     if (!result) {
       socket.emit('roomError', 'שגיאה ביצירת חדר');
       return;
+    }
+    // Set target score if provided
+    if (targetScore && targetScore >= 500 && targetScore <= 2000) {
+      result.room.state.targetScore = targetScore;
     }
     socket.join(result.room.code);
     socket.emit('roomJoined', {
@@ -185,11 +189,32 @@ io.on('connection', (socket) => {
   socket.on('nextRound', () => {
     const room = getRoom(socket.id);
     if (!room) return;
-    
+
     nextRound(room.state);
     broadcastState(room);
   });
-  
+
+  socket.on('swapSeat', (targetSeat: SeatPosition) => {
+    const room = getRoom(socket.id);
+    if (!room) return;
+
+    const result = swapSeat(socket.id, targetSeat);
+    if (result) {
+      io.to(result.room.code).emit('playerLeft', { seat: result.oldSeat });
+      broadcastState(result.room);
+    }
+  });
+
+  socket.on('updateSettings', (settings: { targetScore: number }) => {
+    const room = getRoom(socket.id);
+    if (!room) return;
+
+    const result = updateRoomSettings(socket.id, settings);
+    if (result) {
+      broadcastState(result.room);
+    }
+  });
+
   socket.on('disconnect', () => {
     console.log(`Player disconnected: ${socket.id}`);
     const result = removePlayer(socket.id);

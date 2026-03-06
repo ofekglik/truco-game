@@ -144,6 +144,8 @@ export interface ClientGameState {
   scores: { team1: number; team2: number };
   roundHistory: RoundScore[];
   roundNumber: number;
+  targetScore: number;
+  roomSettings: { targetScore: number };
   lastMessage: string;
   validActions: ValidActions;
 }
@@ -153,4 +155,8 @@ export const SEAT_NAMES_HE: Record<SeatPosition, string> = {
   north: 'צפון',
   east: 'מזרח',
   west: 'מערב',
+};
+
+export const CARD_POWER: Record<Rank, number> = {
+  2: 0, 4: 1, 5: 2, 6: 3, 7: 4, 10: 5, 11: 6, 12: 7, 3: 8, 1: 9
 };

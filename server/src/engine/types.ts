@@ -110,36 +110,38 @@ export interface GameState {
   players: Record<SeatPosition, Player | null>;
   dealerSeat: SeatPosition;
   currentTurnSeat: SeatPosition;
-  
+
   // Bidding
   bids: Bid[];
   currentBidAmount: number;
   currentBidWinner: SeatPosition | null;
   biddingTeam: TeamId | null;
-  
+
   // Trump
   trumpSuit: Suit | null;
-  
+
   // Capo
   capoType: CapoType;
   capoDeclarerSeat: SeatPosition | null;
-  
+
   // Singing
   cantes: Cante[];
   singingDone: boolean;
-  
+  singingAfterTrick: boolean; // flag for when singing happens after a trick win
+
   // Tricks
   currentTrick: Trick;
   completedTricks: Trick[];
   trickNumber: number;
   team1TricksWon: number;
   team2TricksWon: number;
-  
+
   // Scoring
   scores: { team1: number; team2: number };
   roundHistory: RoundScore[];
   roundNumber: number;
-  
+  targetScore: number; // target score to win the game
+
   // Messages
   lastMessage: string;
 }
@@ -169,6 +171,8 @@ export interface ClientGameState {
   scores: { team1: number; team2: number };
   roundHistory: RoundScore[];
   roundNumber: number;
+  targetScore: number;
+  roomSettings: { targetScore: number };
   lastMessage: string;
   validActions: ValidActions;
 }
@@ -205,4 +209,6 @@ export interface ClientToServerEvents {
   doneSinging: () => void;
   playCard: (cardId: string) => void;
   nextRound: () => void;
+  swapSeat: (targetSeat: SeatPosition) => void;
+  updateSettings: (settings: { targetScore: number }) => void;
 }

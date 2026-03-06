@@ -145,3 +145,56 @@ export function removePlayer(socketId: string): { room: Room; seat: SeatPosition
 export function isRoomFull(room: Room): boolean {
   return SEAT_ORDER.every(s => room.state.players[s] !== null);
 }
+
+export function swapSeat(socketId: string, targetSeat: SeatPosition): { room: Room; oldSeat: SeatPosition } | null {
+  const code = socketToRoom.get(socketId);
+  if (!code) return null;
+
+  const room = rooms.get(code);
+  if (!room) return null;
+
+  // Only allow swapping during WAITING phase
+  if (room.state.phase !== GamePhase.WAITING) return null;
+
+  const currentSeat = room.socketToSeat.get(socketId);
+  if (!currentSeat) return null;
+
+  // Check if target seat is empty
+  if (room.state.players[targetSeat]) return null;
+
+  // Move player to new seat
+  const player = room.state.players[currentSeat];
+  if (!player) return null;
+
+  // Update player seat
+  player.seat = targetSeat;
+
+  // Update mappings
+  room.socketToSeat.set(socketId, targetSeat);
+  room.seatToSocket.delete(currentSeat);
+  room.seatToSocket.set(targetSeat, socketId);
+
+  // Update game state
+  room.state.players[currentSeat] = null;
+  room.state.players[targetSeat] = player;
+
+  return { room, oldSeat: currentSeat };
+}
+
+export function updateRoomSettings(socketId: string, settings: { targetScore: number }): { room: Room } | null {
+  const code = socketToRoom.get(socketId);
+  if (!code) return null;
+
+  const room = rooms.get(code);
+  if (!room) return null;
+
+  // Only allow changing settings during WAITING phase
+  if (room.state.phase !== GamePhase.WAITING) return null;
+
+  // Validate settings
+  if (settings.targetScore && settings.targetScore > 0) {
+    room.state.targetScore = settings.targetScore;
+  }
+
+  return { room };
+}
