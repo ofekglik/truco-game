@@ -327,8 +327,14 @@ export const GameTable: React.FC<GameTableProps> = ({
                 {player.name}
                 {!player.connected && <span className={`text-red-400 ml-1 ${isMobile ? 'text-[8px]' : 'text-xs'}`}>• לא מחובר</span>}
               </div>
+              {/* Bid badge during bidding phase */}
+              {gameState.phase === GamePhase.BIDDING && gameState.currentBidWinner === seat && gameState.currentBidAmount > 0 && (
+                <div className={`${isMobile ? 'text-[9px]' : 'text-xs'} text-yellow-400 font-bold`}>
+                  הצעה: {gameState.currentBidAmount}
+                </div>
+              )}
               {/* Card count — dots on desktop, number on mobile */}
-              {isMobile ? (
+              {gameState.phase !== GamePhase.BIDDING && (isMobile ? (
                 <div className="text-[9px] text-gray-400">{player.cardCount} קלפים</div>
               ) : (
                 <div className="flex gap-1 mt-1">
@@ -343,7 +349,7 @@ export const GameTable: React.FC<GameTableProps> = ({
                     <span className="text-xs text-gray-300 ml-1">+{player.cardCount - 10}</span>
                   )}
                 </div>
-              )}
+              ))}
             </div>
           </div>
         </div>
@@ -356,8 +362,8 @@ export const GameTable: React.FC<GameTableProps> = ({
     const cards = gameState.currentTrick.cards;
     if (cards.length === 0) return null;
 
-    // Tight cluster in center — small directional offsets so all 4 cards are visible
-    const off = isMobile ? 22 : 35;
+    // Spread cards toward each player — enough spacing so all 4 are fully visible
+    const off = isMobile ? 44 : 70;
 
     // Each card shifts slightly toward the player who played it
     const positionMap: Record<string, { x: number; y: number }> = {
@@ -1192,19 +1198,24 @@ export const GameTable: React.FC<GameTableProps> = ({
             ))}
           </button>
 
-          {/* Mobile: Trump + bid info — right side of board, next to trick cards */}
+          {/* Mobile: Trump badge — solid, centered above trick cards */}
           {gameState.trumpSuit && (
-            <div className="absolute right-2 top-1/2 -translate-y-1/2 z-[15] pointer-events-none">
-              <div className="flex flex-col items-center gap-0.5 opacity-60">
-                <span className="text-2xl" style={{ color: SUIT_COLORS[gameState.trumpSuit] }}>
+            <div className="absolute left-1/2 -translate-x-1/2 z-[15] pointer-events-none" style={{ top: 'calc(50% - 80px)' }}>
+              <div className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 border-2 backdrop-blur-sm"
+                style={{
+                  backgroundColor: `${SUIT_COLORS[gameState.trumpSuit]}22`,
+                  borderColor: SUIT_COLORS[gameState.trumpSuit],
+                  boxShadow: `0 0 10px ${SUIT_COLORS[gameState.trumpSuit]}44`,
+                }}>
+                <span className="text-lg" style={{ color: SUIT_COLORS[gameState.trumpSuit] }}>
                   {SUIT_SYMBOLS[gameState.trumpSuit]}
                 </span>
                 <span className="text-[10px] font-bold" style={{ color: SUIT_COLORS[gameState.trumpSuit] }}>
                   {SUIT_NAMES_HE[gameState.trumpSuit]}
                 </span>
                 {gameState.currentBidWinner && gameState.players[gameState.currentBidWinner] && (
-                  <span className="text-[8px] text-gray-300">
-                    {gameState.currentBidAmount}
+                  <span className="text-[9px] text-gray-300">
+                    {gameState.players[gameState.currentBidWinner]!.name} {gameState.currentBidAmount}
                   </span>
                 )}
               </div>
@@ -1213,11 +1224,8 @@ export const GameTable: React.FC<GameTableProps> = ({
 
           {/* Mobile: thin message bar below score pill */}
           <div className="absolute top-7 left-2 right-10 z-20">
-            <div className={`px-2 py-0.5 rounded text-[10px] font-medium backdrop-blur-sm truncate ${
-              isMyTurn ? 'bg-yellow-600/70 text-black' : 'bg-black/50 text-gray-300'
-            }`}>
+            <div className="px-2 py-0.5 rounded text-[10px] font-medium backdrop-blur-sm truncate bg-black/50 text-gray-300">
               {gameState.lastMessage}
-              {isMyTurn && ' ◀ תורך!'}
             </div>
           </div>
         </>
@@ -1233,11 +1241,16 @@ export const GameTable: React.FC<GameTableProps> = ({
             <span className="text-red-400">{gameState.team2TricksWon}</span>
           </div>
 
-          {/* Desktop: Trump + bid info — right side of board, next to trick cards */}
+          {/* Desktop: Trump badge — solid, centered above trick cards */}
           {gameState.trumpSuit && (
-            <div className="absolute right-6 top-1/2 -translate-y-1/2 z-[15] pointer-events-none">
-              <div className="flex flex-col items-center gap-1 opacity-50">
-                <span className="text-4xl" style={{ color: SUIT_COLORS[gameState.trumpSuit] }}>
+            <div className="absolute left-1/2 -translate-x-1/2 z-[15] pointer-events-none" style={{ top: 'calc(50% - 120px)' }}>
+              <div className="flex items-center gap-2 rounded-xl px-4 py-2 border-2 backdrop-blur-sm"
+                style={{
+                  backgroundColor: `${SUIT_COLORS[gameState.trumpSuit]}22`,
+                  borderColor: SUIT_COLORS[gameState.trumpSuit],
+                  boxShadow: `0 0 16px ${SUIT_COLORS[gameState.trumpSuit]}44`,
+                }}>
+                <span className="text-2xl" style={{ color: SUIT_COLORS[gameState.trumpSuit] }}>
                   {SUIT_SYMBOLS[gameState.trumpSuit]}
                 </span>
                 <span className="text-sm font-bold" style={{ color: SUIT_COLORS[gameState.trumpSuit] }}>
@@ -1266,11 +1279,8 @@ export const GameTable: React.FC<GameTableProps> = ({
 
           {/* Desktop: Message bar below score */}
           <div className="absolute top-14 left-1/2 -translate-x-1/2 z-20">
-            <div className={`px-4 py-2 rounded-full text-sm font-medium backdrop-blur-sm ${
-              isMyTurn ? 'bg-yellow-600/80 text-black' : 'bg-black/60 text-gray-200'
-            }`}>
+            <div className="px-4 py-2 rounded-full text-sm font-medium backdrop-blur-sm bg-black/60 text-gray-200">
               {gameState.lastMessage}
-              {isMyTurn && ' ◀ תורך!'}
             </div>
           </div>
 
@@ -1440,8 +1450,8 @@ export const GameTable: React.FC<GameTableProps> = ({
               style={!isMyTurn ? { borderColor: myTeamColor } : undefined}>
               {gameState.players[gameState.mySeat]!.avatar && <span className="mr-1">{gameState.players[gameState.mySeat]!.avatar}</span>}
               {gameState.players[gameState.mySeat]!.name}
-              {isMyTurn && (gameState.phase === GamePhase.TRICK_PLAY || gameState.phase === GamePhase.BIDDING) && (
-                <span className="inline-block w-2 h-2 bg-yellow-400 rounded-full ml-2 animate-pulse"></span>
+              {gameState.phase === GamePhase.BIDDING && gameState.currentBidWinner === gameState.mySeat && gameState.currentBidAmount > 0 && (
+                <span className="text-yellow-400 font-bold ml-1">({gameState.currentBidAmount})</span>
               )}
             </div>
           );
