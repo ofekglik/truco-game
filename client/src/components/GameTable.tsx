@@ -78,6 +78,8 @@ export const GameTable: React.FC<GameTableProps> = ({
   const [windowHeight, setWindowHeight] = useState(window.innerHeight);
   const [showScorePill, setShowScorePill] = useState(false);
   const [draggingCardId, setDraggingCardId] = useState<string | null>(null);
+  const [panelCollapsed, setPanelCollapsed] = useState(false);
+  const handScrollRef = useRef<HTMLDivElement>(null);
 
   const dragStateRef = useRef<{
     isDragging: boolean;
@@ -116,6 +118,11 @@ export const GameTable: React.FC<GameTableProps> = ({
   useEffect(() => {
     localStorage.setItem('soundEnabled', String(soundEnabled));
   }, [soundEnabled]);
+
+  // Reset panel collapsed state when phase changes (new popup = expand it)
+  useEffect(() => {
+    setPanelCollapsed(false);
+  }, [gameState.phase]);
 
   useEffect(() => {
     if (handOrder.length === 0 || gameState.roundNumber > (lastCompletedTricksLength > gameState.completedTricks.length ? gameState.roundNumber : -1)) {
@@ -302,7 +309,7 @@ export const GameTable: React.FC<GameTableProps> = ({
           isMobile ? 'rounded-lg px-2 py-1.5' : 'rounded-xl px-4 py-3'
         } ${
           isCurrentTurn
-            ? 'bg-yellow-500/30 border-yellow-400 shadow-lg shadow-yellow-400/50'
+            ? `bg-yellow-500/30 border-yellow-400 shadow-lg shadow-yellow-400/50 animate-turnPulse`
             : `bg-gradient-to-br ${teamBg} border-gray-600`
         } ${!player.connected ? 'opacity-50' : ''}`}>
           {/* Team color indicator bar */}
@@ -345,17 +352,20 @@ export const GameTable: React.FC<GameTableProps> = ({
 
   const renderTrickCards = () => {
     const cards = gameState.currentTrick.cards;
-    const cardCount = cards.length;
-    // Spread radius: tighter on mobile, wider on desktop for large cards
-    const radius = isMobile ? 40 : 85;
+    // Position each card near the player who played it (directional layout)
+    const offset = isMobile ? 45 : 80;
+
+    // Map each seat's relative position to x,y offsets from center
+    const positionMap: Record<string, { x: number; y: number }> = {
+      bottom: { x: 0, y: offset },
+      top: { x: 0, y: -offset },
+      left: { x: -offset, y: 0 },
+      right: { x: offset, y: 0 },
+    };
 
     return cards.map((tc, i) => {
-      const angleStep = cardCount > 1 ? 360 / cardCount : 0;
-      const angle = i * angleStep;
-
-      const x = Math.cos((angle * Math.PI) / 180) * radius;
-      const y = Math.sin((angle * Math.PI) / 180) * radius;
-      const cardRotation = ((i - Math.floor(cardCount / 2)) * 8) % 360;
+      const relPos = getRelativePosition(gameState.mySeat, tc.seat);
+      const pos = positionMap[relPos] || { x: 0, y: 0 };
 
       return (
         <div
@@ -364,11 +374,10 @@ export const GameTable: React.FC<GameTableProps> = ({
           style={{
             left: '50%',
             top: '50%',
-            transform: `translate(calc(-50% + ${x}px), calc(-50% + ${y}px)) rotate(${cardRotation}deg)`,
+            transform: `translate(calc(-50% + ${pos.x}px), calc(-50% + ${pos.y}px))`,
             animationDelay: `${i * 100}ms`,
           }}
         >
-          {/* Trick cards: medium on mobile, large on desktop */}
           <CardComponent
             card={tc.card}
             large={!isMobile}
@@ -386,69 +395,94 @@ export const GameTable: React.FC<GameTableProps> = ({
     const allBids = Array.from({ length: 16 }, (_, i) => 70 + i * 10);
 
     if (isMobile) {
-      // Mobile: full-width bottom sheet pinned to bottom of screen
+      // Mobile: collapsible bottom sheet
+      if (panelCollapsed) {
+        // Collapsed: compact bar with current bid info + expand/pass buttons
+        return (
+          <div className="fixed bottom-0 left-0 right-0 z-50" dir="rtl">
+            <div className="bg-[#16213e]/95 backdrop-blur-md border-t border-yellow-500/40 px-3 py-2 flex items-center gap-2">
+              <button
+                onClick={() => setPanelCollapsed(false)}
+                className="flex-1 py-2.5 bg-yellow-500 hover:bg-yellow-400 text-black font-bold rounded-xl text-sm active:scale-95"
+              >
+                ▲ הציע {gameState.currentBidAmount > 0 ? `(נוכחי: ${gameState.currentBidAmount})` : ''}
+              </button>
+              <button onClick={onPassBid}
+                className="px-4 py-2.5 bg-gray-700/80 hover:bg-gray-600 text-white font-bold rounded-xl text-sm active:scale-95">
+                עבור ❌
+              </button>
+            </div>
+          </div>
+        );
+      }
+
+      // Expanded: full bid grid
       return (
-        <>
-          {/* Backdrop */}
-          <div className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm animate-fadeIn" />
+        <div className="fixed bottom-0 left-0 right-0 z-50 animate-slideUpBottom">
+          <div className="bg-[#16213e] rounded-t-2xl shadow-2xl border-t border-[#4a5a7e]/60 overflow-hidden">
 
-          <div className="fixed bottom-0 left-0 right-0 z-50 animate-slideUpBottom">
-            <div className="bg-[#16213e] rounded-t-2xl shadow-2xl border-t border-[#4a5a7e]/60 overflow-hidden">
+            {/* Collapse handle */}
+            <button
+              onClick={() => setPanelCollapsed(true)}
+              className="w-full flex justify-center pt-2 pb-1"
+            >
+              <div className="w-10 h-1 bg-gray-500 rounded-full" />
+            </button>
 
-              {/* Drag handle */}
-              <div className="flex justify-center pt-2 pb-1">
-                <div className="w-10 h-1 bg-gray-500 rounded-full" />
-              </div>
-
-              {/* Header: current bid status */}
-              <div className="px-4 py-2 flex items-center justify-between" dir="rtl">
-                <span className="text-white text-sm font-bold">תורך להציע</span>
-                {gameState.currentBidAmount > 0 ? (
-                  <span className="text-yellow-400 text-sm font-bold">
-                    נוכחי: {gameState.currentBidAmount} ({gameState.players[gameState.currentBidWinner!]?.name})
+            {/* Header: current bid status + minimize button */}
+            <div className="px-4 py-1.5 flex items-center justify-between" dir="rtl">
+              <span className="text-white text-sm font-bold">תורך להציע</span>
+              <div className="flex items-center gap-2">
+                {gameState.currentBidAmount > 0 && (
+                  <span className="text-yellow-400 text-xs font-bold">
+                    נוכחי: {gameState.currentBidAmount}
                   </span>
-                ) : (
-                  <span className="text-gray-500 text-xs">אין הצעות עדיין</span>
                 )}
-              </div>
-
-              {/* Bid grid — 4 cols, compact */}
-              <div className="px-3 pb-2">
-                <div className="grid grid-cols-4 gap-1.5">
-                  {allBids.map(val => {
-                    const isDisabled = val < minBid;
-                    return (
-                      <button
-                        key={val}
-                        onClick={() => !isDisabled && onPlaceBid(val)}
-                        disabled={isDisabled}
-                        className={`py-2.5 rounded-xl font-bold text-base transition-all ${
-                          isDisabled
-                            ? 'bg-gray-800/40 text-gray-600 cursor-not-allowed'
-                            : 'bg-[#2a3a5e] hover:bg-yellow-500 hover:text-black text-white active:scale-95 active:bg-yellow-500 active:text-black'
-                        }`}
-                      >
-                        {val}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Bottom actions: Pass + Capo */}
-              <div className="px-3 pb-4 pt-1 flex gap-2">
-                <button onClick={onPassBid}
-                  className="flex-1 py-3 bg-gray-700/80 hover:bg-gray-600 text-white font-bold rounded-xl transition-colors text-base active:scale-95">
-                  עבור ❌
-                </button>
-                <button onClick={() => onPlaceBid(230)}
-                  className="flex-1 py-3 bg-red-600 hover:bg-red-500 text-white font-bold rounded-xl transition-colors text-base active:scale-95">
-                  קאפו! 💥
+                <button
+                  onClick={() => setPanelCollapsed(true)}
+                  className="px-2 py-1 bg-gray-700/60 rounded-lg text-gray-400 text-xs"
+                >
+                  ▼ הסתר
                 </button>
               </div>
             </div>
+
+            {/* Bid grid — 4 cols, compact */}
+            <div className="px-3 pb-2">
+              <div className="grid grid-cols-4 gap-1.5">
+                {allBids.map(val => {
+                  const isDisabled = val < minBid;
+                  return (
+                    <button
+                      key={val}
+                      onClick={() => !isDisabled && onPlaceBid(val)}
+                      disabled={isDisabled}
+                      className={`py-2.5 rounded-xl font-bold text-base transition-all ${
+                        isDisabled
+                          ? 'bg-gray-800/40 text-gray-600 cursor-not-allowed'
+                          : 'bg-[#2a3a5e] hover:bg-yellow-500 hover:text-black text-white active:scale-95 active:bg-yellow-500 active:text-black'
+                      }`}
+                    >
+                      {val}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Bottom actions: Pass + Capo */}
+            <div className="px-3 pb-4 pt-1 flex gap-2">
+              <button onClick={onPassBid}
+                className="flex-1 py-3 bg-gray-700/80 hover:bg-gray-600 text-white font-bold rounded-xl transition-colors text-base active:scale-95">
+                עבור ❌
+              </button>
+              <button onClick={() => onPlaceBid(230)}
+                className="flex-1 py-3 bg-red-600 hover:bg-red-500 text-white font-bold rounded-xl transition-colors text-base active:scale-95">
+                קאפו! 💥
+              </button>
+            </div>
           </div>
-        </>
+        </div>
       );
     }
 
@@ -513,35 +547,67 @@ export const GameTable: React.FC<GameTableProps> = ({
     if (gameState.phase !== GamePhase.TRUMP_DECLARATION || !validActions.canDeclareTrump) return null;
 
     if (isMobile) {
-      // Mobile: fixed bottom sheet
-      return (
-        <>
-          <div className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm animate-fadeIn" />
-          <div className="fixed bottom-0 left-0 right-0 z-50 animate-slideUpBottom">
-            <div className="bg-[#16213e] rounded-t-2xl shadow-2xl border-t border-[#4a5a7e]/60 overflow-hidden">
-              <div className="flex justify-center pt-2 pb-1">
-                <div className="w-10 h-1 bg-gray-500 rounded-full" />
-              </div>
-              <p className="text-center text-yellow-400 font-bold text-lg px-4 pb-3">בחר אטו (חליפה שולטת)</p>
-              <div className="grid grid-cols-2 gap-2.5 px-4 pb-5">
-                {Object.values(Suit).map(suit => (
-                  <button
-                    key={suit}
-                    onClick={() => onDeclareTrump(suit)}
-                    className="py-4 px-4 rounded-xl font-bold text-lg transition-all active:scale-95 border-2"
-                    style={{
-                      backgroundColor: SUIT_COLORS[suit] + '33',
-                      borderColor: SUIT_COLORS[suit],
-                      color: SUIT_COLORS[suit],
-                    }}
-                  >
-                    {SUIT_SYMBOLS[suit]} {SUIT_NAMES_HE[suit]}
-                  </button>
-                ))}
-              </div>
+      // Mobile: collapsible bottom sheet
+      if (panelCollapsed) {
+        // Collapsed: compact bar with expand button
+        return (
+          <div className="fixed bottom-0 left-0 right-0 z-50" dir="rtl">
+            <div className="bg-[#16213e]/95 backdrop-blur-md border-t border-yellow-500/40 px-3 py-2">
+              <button
+                onClick={() => setPanelCollapsed(false)}
+                className="w-full py-2.5 bg-yellow-500 hover:bg-yellow-400 text-black font-bold rounded-xl text-sm active:scale-95"
+              >
+                ▲ בחר אטו
+              </button>
             </div>
           </div>
-        </>
+        );
+      }
+
+      // Expanded: full suit grid as bottom sheet
+      return (
+        <div className="fixed bottom-0 left-0 right-0 z-50 animate-slideUpBottom">
+          <div className="bg-[#16213e] rounded-t-2xl shadow-2xl border-t border-[#4a5a7e]/60 overflow-hidden">
+            {/* Collapse handle */}
+            <button
+              onClick={() => setPanelCollapsed(true)}
+              className="w-full flex justify-center pt-2 pb-1"
+            >
+              <div className="w-10 h-1 bg-gray-500 rounded-full" />
+            </button>
+
+            {/* Header */}
+            <div className="px-4 py-1.5 flex items-center justify-between" dir="rtl">
+              <span className="text-white text-sm font-bold">בחר אטו (חליפה שולטת)</span>
+              <button
+                onClick={() => setPanelCollapsed(true)}
+                className="px-2 py-1 bg-gray-700/60 rounded-lg text-gray-400 text-xs"
+              >
+                ▼ הסתר
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2.5 px-4 pb-5">
+              {Object.values(Suit).map(suit => (
+                <button
+                  key={suit}
+                  onClick={() => {
+                    onDeclareTrump(suit);
+                    setPanelCollapsed(true);
+                  }}
+                  className="py-4 px-4 rounded-xl font-bold text-lg transition-all active:scale-95 border-2"
+                  style={{
+                    backgroundColor: SUIT_COLORS[suit] + '33',
+                    borderColor: SUIT_COLORS[suit],
+                    color: SUIT_COLORS[suit],
+                  }}
+                >
+                  {SUIT_SYMBOLS[suit]} {SUIT_NAMES_HE[suit]}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
       );
     }
 
@@ -611,20 +677,51 @@ export const GameTable: React.FC<GameTableProps> = ({
     );
 
     if (isMobile) {
-      return (
-        <>
-          <div className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm animate-fadeIn" />
-          <div className="fixed bottom-0 left-0 right-0 z-50 animate-slideUpBottom">
-            <div className="bg-[#16213e] rounded-t-2xl shadow-2xl border-t border-[#4a5a7e]/60 overflow-hidden">
-              <div className="flex justify-center pt-2 pb-1">
-                <div className="w-10 h-1 bg-gray-500 rounded-full" />
-              </div>
-              <div className="px-4 pb-5">
-                {singingContent}
-              </div>
+      // Mobile: collapsible bottom sheet
+      if (panelCollapsed) {
+        // Collapsed: compact bar with expand button
+        return (
+          <div className="fixed bottom-0 left-0 right-0 z-50" dir="rtl">
+            <div className="bg-[#16213e]/95 backdrop-blur-md border-t border-yellow-500/40 px-3 py-2">
+              <button
+                onClick={() => setPanelCollapsed(false)}
+                className="w-full py-2.5 bg-yellow-500 hover:bg-yellow-400 text-black font-bold rounded-xl text-sm active:scale-95"
+              >
+                ▲ שירה
+              </button>
             </div>
           </div>
-        </>
+        );
+      }
+
+      // Expanded: singing options as bottom sheet
+      return (
+        <div className="fixed bottom-0 left-0 right-0 z-50 animate-slideUpBottom">
+          <div className="bg-[#16213e] rounded-t-2xl shadow-2xl border-t border-[#4a5a7e]/60 overflow-hidden">
+            {/* Collapse handle */}
+            <button
+              onClick={() => setPanelCollapsed(true)}
+              className="w-full flex justify-center pt-2 pb-1"
+            >
+              <div className="w-10 h-1 bg-gray-500 rounded-full" />
+            </button>
+
+            {/* Header */}
+            <div className="px-4 py-1.5 flex items-center justify-between" dir="rtl">
+              <span className="text-white text-sm font-bold">שירה</span>
+              <button
+                onClick={() => setPanelCollapsed(true)}
+                className="px-2 py-1 bg-gray-700/60 rounded-lg text-gray-400 text-xs"
+              >
+                ▼ הסתר
+              </button>
+            </div>
+
+            <div className="px-4 pb-5">
+              {singingContent}
+            </div>
+          </div>
+        </div>
       );
     }
 
@@ -984,23 +1081,25 @@ export const GameTable: React.FC<GameTableProps> = ({
         .animate-shimmerBorder {
           animation: shimmerBorder 2s ease-in-out infinite;
         }
+        @keyframes turnPulse {
+          0%, 100% { box-shadow: 0 0 8px rgba(234,179,8,0.4), 0 0 0 0 rgba(234,179,8,0.3); }
+          50% { box-shadow: 0 0 20px rgba(234,179,8,0.8), 0 0 30px 5px rgba(234,179,8,0.2); }
+        }
+        .animate-turnPulse {
+          animation: turnPulse 1.5s ease-in-out infinite;
+        }
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
       `}</style>
 
-      {/* Landscape blocker — shown only on phones in landscape */}
-      {isMobile && isLandscape && (
-        <div className="fixed inset-0 z-[100] bg-[#0d1b0e] flex flex-col items-center justify-center gap-4">
-          <div className="text-6xl">📱</div>
-          <p className="text-white text-lg font-bold">סובב את המכשיר לאורך</p>
-          <p className="text-gray-400 text-sm">המשחק עובד רק במצב portrait</p>
-        </div>
-      )}
+      {/* Landscape mode is now supported — no blocker */}
 
       {/* Table felt */}
       <div className={`absolute rounded-[2rem] bg-gradient-to-br from-[#1a5c2a] to-[#0f3d1a] shadow-inner ${
         isMobile
           ? 'left-2 right-2 top-2 border-[6px] border-[#3a2010]'
           : 'inset-8 rounded-[3rem] border-[12px] border-[#3a2010]'
-      }`} style={isMobile ? { bottom: '170px' } : undefined}>
+      }`} style={isMobile ? { bottom: (isMobile && isLandscape) ? '130px' : '155px' } : undefined}>
         <div className={`absolute inset-1 border border-[#2a6a3a]/30 ${isMobile ? 'rounded-[1.5rem]' : 'rounded-[2.5rem]'}`} />
 
         {renderTrickCards()}
@@ -1236,65 +1335,105 @@ export const GameTable: React.FC<GameTableProps> = ({
         </div>
       )}
 
-      {/* My hand - Fan layout */}
-      <div
-        className="absolute bottom-2 left-1/2 -translate-x-1/2 z-20 cursor-grab active:cursor-grabbing"
-        style={{
-          width: isMobile ? Math.min(windowWidth - 16, Math.max(280, cardCount * 48)) : Math.max(300, cardCount * 80),
-          height: isMobile ? 160 : 260,
-        }}
-        onMouseMove={handleDragMove}
-        onMouseUp={handleDragEnd}
-        onMouseLeave={handleDragEnd}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
-      >
-        <div className="relative w-full h-full flex items-end justify-center" style={{ perspective: '1000px' }}>
-          {sortedHand.map((card, i) => {
-            const isPlayable = validActions.playableCards.includes(card.id);
-            const isSelected = selectedCardId === card.id;
-            const isDragging = draggingCardId === card.id;
-
-            const centerIdx = (cardCount - 1) / 2;
-            const offset = i - centerIdx;
-            const rotation = offset * fanSpreadDegrees;
-            const yOffset = Math.cos((offset / (cardCount / 2)) * (Math.PI / 3)) * fanHeightPx;
-
-            return (
-              <div
-                key={card.id}
-                className={`absolute transition-all ${isDragging ? 'opacity-50' : ''}`}
-                style={{
-                  bottom: `${yOffset}px`,
-                  left: `calc(50% + ${offset * (isMobile ? 38 : 62)}px)`,
-                  transform: `translateX(-50%) rotate(${rotation}deg) ${isSelected ? 'translateY(-20px)' : ''}`,
-                  transformOrigin: 'bottom center',
-                  zIndex: isSelected ? 100 : i,
-                }}
-                onMouseDown={(e) => handleDragStart(card.id, e)}
-                onTouchStart={(e) => handleTouchStart(card.id, e)}
-              >
-                <CardComponent
-                  card={card}
-                  playable={isPlayable && gameState.phase === GamePhase.TRICK_PLAY}
-                  selected={isSelected}
-                  large={!isMobile}
-                  isBiddingPhase={gameState.phase === GamePhase.BIDDING}
-                  onClick={() => {
-                    if (gameState.phase === GamePhase.TRICK_PLAY && !dragStateRef.current.isDragging) {
-                      setSelectedCardId(isSelected ? null : card.id);
-                    }
+      {/* My hand - Scrollable strip on mobile, Fan layout on desktop */}
+      {isMobile ? (
+        <div className="absolute bottom-1 left-0 right-0 z-20" style={{ height: windowHeight < windowWidth ? '120px' : '140px' }}>
+          <div
+            ref={handScrollRef}
+            className="flex items-end gap-1 px-2 h-full overflow-x-auto hide-scrollbar"
+            style={{ scrollSnapType: 'x mandatory' }}
+          >
+            {sortedHand.map((card, i) => {
+              const isPlayable = validActions.playableCards.includes(card.id);
+              const isSelected = selectedCardId === card.id;
+              return (
+                <div
+                  key={card.id}
+                  className="flex-shrink-0 transition-transform duration-150"
+                  style={{
+                    scrollSnapAlign: 'center',
+                    transform: isSelected ? 'translateY(-16px)' : 'translateY(0)',
+                    zIndex: isSelected ? 100 : i,
                   }}
-                />
-              </div>
-            );
-          })}
+                  onTouchStart={(e) => handleTouchStart(card.id, e)}
+                >
+                  <CardComponent
+                    card={card}
+                    playable={isPlayable && gameState.phase === GamePhase.TRICK_PLAY}
+                    selected={isSelected}
+                    large={false}
+                    isBiddingPhase={gameState.phase === GamePhase.BIDDING}
+                    onClick={() => {
+                      if (gameState.phase === GamePhase.TRICK_PLAY && !dragStateRef.current.isDragging) {
+                        setSelectedCardId(isSelected ? null : card.id);
+                      }
+                    }}
+                  />
+                </div>
+              );
+            })}
+          </div>
         </div>
-      </div>
+      ) : (
+        <div
+          className="absolute bottom-2 left-1/2 -translate-x-1/2 z-20 cursor-grab active:cursor-grabbing"
+          style={{
+            width: Math.max(300, cardCount * 80),
+            height: 260,
+          }}
+          onMouseMove={handleDragMove}
+          onMouseUp={handleDragEnd}
+          onMouseLeave={handleDragEnd}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+        >
+          <div className="relative w-full h-full flex items-end justify-center" style={{ perspective: '1000px' }}>
+            {sortedHand.map((card, i) => {
+              const isPlayable = validActions.playableCards.includes(card.id);
+              const isSelected = selectedCardId === card.id;
+              const isDragging = draggingCardId === card.id;
+
+              const centerIdx = (cardCount - 1) / 2;
+              const offset = i - centerIdx;
+              const rotation = offset * fanSpreadDegrees;
+              const yOffset = Math.cos((offset / (cardCount / 2)) * (Math.PI / 3)) * fanHeightPx;
+
+              return (
+                <div
+                  key={card.id}
+                  className={`absolute transition-all ${isDragging ? 'opacity-50' : ''}`}
+                  style={{
+                    bottom: `${yOffset}px`,
+                    left: `calc(50% + ${offset * 62}px)`,
+                    transform: `translateX(-50%) rotate(${rotation}deg) ${isSelected ? 'translateY(-20px)' : ''}`,
+                    transformOrigin: 'bottom center',
+                    zIndex: isSelected ? 100 : i,
+                  }}
+                  onMouseDown={(e) => handleDragStart(card.id, e)}
+                  onTouchStart={(e) => handleTouchStart(card.id, e)}
+                >
+                  <CardComponent
+                    card={card}
+                    playable={isPlayable && gameState.phase === GamePhase.TRICK_PLAY}
+                    selected={isSelected}
+                    large={true}
+                    isBiddingPhase={gameState.phase === GamePhase.BIDDING}
+                    onClick={() => {
+                      if (gameState.phase === GamePhase.TRICK_PLAY && !dragStateRef.current.isDragging) {
+                        setSelectedCardId(isSelected ? null : card.id);
+                      }
+                    }}
+                  />
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Card confirmation popup */}
       {selectedCard && gameState.phase === GamePhase.TRICK_PLAY && isMyTurn && (
-        <div className="absolute bottom-36 left-1/2 -translate-x-1/2 z-30 flex flex-col items-center gap-2">
+        <div className="absolute left-1/2 -translate-x-1/2 z-30 flex flex-col items-center gap-2" style={{ bottom: isMobile && windowHeight < windowWidth ? '140px' : '180px' }}>
           <div className="bg-[#16213e]/95 border border-yellow-500 rounded-xl p-3 shadow-xl backdrop-blur-sm flex items-center gap-3">
             <CardComponent
               card={selectedCard}
@@ -1324,7 +1463,7 @@ export const GameTable: React.FC<GameTableProps> = ({
 
       {/* My name - positioned at the table edge, above card hand */}
       <div className="absolute left-1/2 -translate-x-1/2 z-20"
-        style={{ bottom: isMobile ? '155px' : '255px' }}>
+        style={{ bottom: isMobile && windowHeight < windowWidth ? '130px' : isMobile ? '155px' : '255px' }}>
         {gameState.players[gameState.mySeat] && (
           <div className={`relative px-3 py-1 rounded-lg text-xs font-medium border ${
             isMyTurn ? 'bg-yellow-600/30 border-yellow-500 text-yellow-300' : 'bg-[#1a2a4e]/80 border-gray-600 text-gray-400'
@@ -1332,6 +1471,9 @@ export const GameTable: React.FC<GameTableProps> = ({
             {gameState.players[gameState.mySeat]!.avatar && <span className="mr-1">{gameState.players[gameState.mySeat]!.avatar}</span>}
             {gameState.players[gameState.mySeat]!.name}
             {isMyTurn && renderTurnTimer()}
+            {isMyTurn && (gameState.phase === GamePhase.TRICK_PLAY || gameState.phase === GamePhase.BIDDING) && (
+              <span className="inline-block w-2 h-2 bg-yellow-400 rounded-full ml-2 animate-pulse"></span>
+            )}
           </div>
         )}
       </div>
