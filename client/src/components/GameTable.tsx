@@ -1326,7 +1326,10 @@ export const GameTable: React.FC<GameTableProps> = ({
 
       {/* My hand - Scrollable strip on mobile (no reorder, just scroll + tap), Fan on desktop */}
       {isMobile ? (
-        <div className="absolute bottom-0 left-0 right-0 z-20" style={{ height: isLandscape ? '95px' : '105px' }}>
+        <div className="absolute left-0 right-0 z-20 transition-all duration-200" style={{
+          height: isLandscape ? '95px' : '105px',
+          bottom: panelCollapsed && (gameState.phase === GamePhase.TRUMP_DECLARATION || gameState.phase === GamePhase.SINGING) ? '52px' : '0px',
+        }}>
           <div
             ref={handScrollRef}
             className="flex items-end gap-1 px-2 h-full overflow-x-auto hide-scrollbar"
