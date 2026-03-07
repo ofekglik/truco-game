@@ -315,8 +315,9 @@ export const GameTable: React.FC<GameTableProps> = ({
         } ${
           isCurrentTurn
             ? `bg-yellow-500/30 border-yellow-400 shadow-lg shadow-yellow-400/50 animate-turnPulse`
-            : `bg-gradient-to-br ${teamBg} border-gray-600`
-        } ${!player.connected ? 'opacity-50' : ''}`}>
+            : `bg-gradient-to-br ${teamBg}`
+        } ${!player.connected ? 'opacity-50' : ''}`}
+          style={!isCurrentTurn ? { borderColor: teamColor } : undefined}>
           {/* Team color indicator bar */}
           <div className={`absolute top-0 left-0 right-0 h-1 ${isMobile ? 'rounded-t-[5px]' : 'rounded-t-[9px]'}`} style={{ backgroundColor: teamColor }} />
 
@@ -1470,18 +1471,27 @@ export const GameTable: React.FC<GameTableProps> = ({
       {/* My name - positioned at the table edge, above card hand */}
       <div className="absolute left-1/2 -translate-x-1/2 z-20"
         style={{ bottom: isMobile ? (isLandscape ? '95px' : '105px') : '255px' }}>
-        {gameState.players[gameState.mySeat] && (
-          <div className={`relative px-3 py-1 rounded-lg text-xs font-medium border ${
-            isMyTurn ? 'bg-yellow-600/30 border-yellow-500 text-yellow-300' : 'bg-[#1a2a4e]/80 border-gray-600 text-gray-400'
-          }`}>
-            {gameState.players[gameState.mySeat]!.avatar && <span className="mr-1">{gameState.players[gameState.mySeat]!.avatar}</span>}
-            {gameState.players[gameState.mySeat]!.name}
-            {isMyTurn && renderTurnTimer()}
-            {isMyTurn && (gameState.phase === GamePhase.TRICK_PLAY || gameState.phase === GamePhase.BIDDING) && (
-              <span className="inline-block w-2 h-2 bg-yellow-400 rounded-full ml-2 animate-pulse"></span>
-            )}
-          </div>
-        )}
+        {gameState.players[gameState.mySeat] && (() => {
+          const myTeam = SEAT_TEAM[gameState.mySeat];
+          const myTeamColor = myTeam === 'team1' ? '#3B82F6' : '#DC2626';
+          const myTeamBg = myTeam === 'team1' ? 'bg-blue-900/60' : 'bg-red-900/60';
+          const myTeamText = myTeam === 'team1' ? 'text-blue-200' : 'text-red-200';
+          return (
+            <div className={`relative px-3 py-1 rounded-lg text-xs font-medium border-2 backdrop-blur-sm ${
+              isMyTurn
+                ? 'bg-yellow-600/30 border-yellow-500 text-yellow-300 animate-turnPulse'
+                : `${myTeamBg} ${myTeamText}`
+            }`}
+              style={!isMyTurn ? { borderColor: myTeamColor } : undefined}>
+              {gameState.players[gameState.mySeat]!.avatar && <span className="mr-1">{gameState.players[gameState.mySeat]!.avatar}</span>}
+              {gameState.players[gameState.mySeat]!.name}
+              {isMyTurn && renderTurnTimer()}
+              {isMyTurn && (gameState.phase === GamePhase.TRICK_PLAY || gameState.phase === GamePhase.BIDDING) && (
+                <span className="inline-block w-2 h-2 bg-yellow-400 rounded-full ml-2 animate-pulse"></span>
+              )}
+            </div>
+          );
+        })()}
       </div>
 
       {/* Action panels */}
