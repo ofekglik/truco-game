@@ -1344,30 +1344,24 @@ export const GameTable: React.FC<GameTableProps> = ({
         </div>
       )}
 
-      {/* My hand - Scrollable strip on mobile, Fan layout on desktop */}
+      {/* My hand - Scrollable strip on mobile (no reorder, just scroll + tap), Fan on desktop */}
       {isMobile ? (
         <div className="absolute bottom-1 left-0 right-0 z-20" style={{ height: windowHeight < windowWidth ? '120px' : '140px' }}>
           <div
             ref={handScrollRef}
-            className={`flex items-end gap-1 px-2 h-full hide-scrollbar ${
-              draggingCardId ? 'overflow-x-hidden' : 'overflow-x-auto'
-            }`}
-            onTouchMove={handleTouchMove}
-            onTouchEnd={handleTouchEnd}
+            className="flex items-end gap-1 px-2 h-full overflow-x-auto hide-scrollbar"
           >
             {sortedHand.map((card, i) => {
               const isPlayable = validActions.playableCards.includes(card.id);
               const isSelected = selectedCardId === card.id;
-              const isDragging = draggingCardId === card.id;
               return (
                 <div
                   key={card.id}
-                  className={`flex-shrink-0 transition-transform duration-150 ${isDragging ? 'opacity-50 scale-105' : ''}`}
+                  className="flex-shrink-0 transition-transform duration-150"
                   style={{
                     transform: isSelected ? 'translateY(-16px)' : 'translateY(0)',
                     zIndex: isSelected ? 100 : i,
                   }}
-                  onTouchStart={(e) => handleTouchStart(card.id, e)}
                 >
                   <CardComponent
                     card={card}
@@ -1376,7 +1370,7 @@ export const GameTable: React.FC<GameTableProps> = ({
                     large={false}
                     isBiddingPhase={gameState.phase === GamePhase.BIDDING}
                     onClick={() => {
-                      if (gameState.phase === GamePhase.TRICK_PLAY && !dragStateRef.current.isDragging) {
+                      if (gameState.phase === GamePhase.TRICK_PLAY) {
                         setSelectedCardId(isSelected ? null : card.id);
                       }
                     }}
