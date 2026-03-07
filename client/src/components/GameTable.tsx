@@ -1108,7 +1108,7 @@ export const GameTable: React.FC<GameTableProps> = ({
         isMobile
           ? 'left-2 right-2 top-2 border-[6px] border-[#3a2010]'
           : 'inset-8 rounded-[3rem] border-[12px] border-[#3a2010]'
-      }`} style={isMobile ? { bottom: (isMobile && isLandscape) ? '130px' : '155px' } : undefined}>
+      }`} style={isMobile ? { bottom: isLandscape ? '95px' : '105px' } : undefined}>
         <div className={`absolute inset-1 border border-[#2a6a3a]/30 ${isMobile ? 'rounded-[1.5rem]' : 'rounded-[2.5rem]'}`} />
 
         {renderTrickCards()}
@@ -1346,7 +1346,7 @@ export const GameTable: React.FC<GameTableProps> = ({
 
       {/* My hand - Scrollable strip on mobile (no reorder, just scroll + tap), Fan on desktop */}
       {isMobile ? (
-        <div className="absolute bottom-1 left-0 right-0 z-20" style={{ height: windowHeight < windowWidth ? '120px' : '140px' }}>
+        <div className="absolute bottom-0 left-0 right-0 z-20" style={{ height: isLandscape ? '95px' : '105px' }}>
           <div
             ref={handScrollRef}
             className="flex items-end gap-1 px-2 h-full overflow-x-auto hide-scrollbar"
@@ -1359,7 +1359,7 @@ export const GameTable: React.FC<GameTableProps> = ({
                   key={card.id}
                   className="flex-shrink-0 transition-transform duration-150"
                   style={{
-                    transform: isSelected ? 'translateY(-16px)' : 'translateY(0)',
+                    transform: isSelected ? 'translateY(-12px)' : 'translateY(0)',
                     zIndex: isSelected ? 100 : i,
                   }}
                 >
@@ -1367,7 +1367,7 @@ export const GameTable: React.FC<GameTableProps> = ({
                     card={card}
                     playable={isPlayable && gameState.phase === GamePhase.TRICK_PLAY}
                     selected={isSelected}
-                    large={false}
+                    small
                     isBiddingPhase={gameState.phase === GamePhase.BIDDING}
                     onClick={() => {
                       if (gameState.phase === GamePhase.TRICK_PLAY) {
@@ -1439,7 +1439,7 @@ export const GameTable: React.FC<GameTableProps> = ({
 
       {/* Card confirmation popup */}
       {selectedCard && gameState.phase === GamePhase.TRICK_PLAY && isMyTurn && (
-        <div className="absolute left-1/2 -translate-x-1/2 z-30 flex flex-col items-center gap-2" style={{ bottom: isMobile && windowHeight < windowWidth ? '140px' : '180px' }}>
+        <div className="absolute left-1/2 -translate-x-1/2 z-30 flex flex-col items-center gap-2" style={{ bottom: isMobile ? (isLandscape ? '110px' : '120px') : '180px' }}>
           <div className="bg-[#16213e]/95 border border-yellow-500 rounded-xl p-3 shadow-xl backdrop-blur-sm flex items-center gap-3">
             <CardComponent
               card={selectedCard}
@@ -1469,7 +1469,7 @@ export const GameTable: React.FC<GameTableProps> = ({
 
       {/* My name - positioned at the table edge, above card hand */}
       <div className="absolute left-1/2 -translate-x-1/2 z-20"
-        style={{ bottom: isMobile && windowHeight < windowWidth ? '130px' : isMobile ? '155px' : '255px' }}>
+        style={{ bottom: isMobile ? (isLandscape ? '95px' : '105px') : '255px' }}>
         {gameState.players[gameState.mySeat] && (
           <div className={`relative px-3 py-1 rounded-lg text-xs font-medium border ${
             isMyTurn ? 'bg-yellow-600/30 border-yellow-500 text-yellow-300' : 'bg-[#1a2a4e]/80 border-gray-600 text-gray-400'
