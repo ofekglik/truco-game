@@ -28,6 +28,7 @@ export function createInitialState(): GameState {
     currentTrick: { cards: [], leadSeat: 'east' },
     completedTricks: [],
     trickNumber: 0,
+    trickPendingResolution: false,
     team1TricksWon: 0,
     team2TricksWon: 0,
     scores: { team1: 0, team2: 0 },
@@ -74,6 +75,7 @@ export function startRound(state: GameState): GameState {
   state.currentTrick = { cards: [], leadSeat: firstPlayer };
   state.completedTricks = [];
   state.trickNumber = 0;
+  state.trickPendingResolution = false;
   state.team1TricksWon = 0;
   state.team2TricksWon = 0;
   state.roundNumber++;
@@ -288,6 +290,10 @@ function startTrickPhase(state: GameState) {
 }
 
 export function playCard(state: GameState, seat: SeatPosition, cardId: string): GameState {
+  if (state.trickPendingResolution) {
+    console.log(`[playCard] REJECTED: trick pending resolution. seat=${seat}, cardId=${cardId}`);
+    return state;
+  }
   if (state.phase !== GamePhase.TRICK_PLAY) {
     console.log(`[playCard] REJECTED: phase is ${state.phase}, not TRICK_PLAY. seat=${seat}, cardId=${cardId}`);
     return state;
@@ -329,74 +335,80 @@ export function playCard(state: GameState, seat: SeatPosition, cardId: string): 
   state.currentTrick.cards.push({ card, seat });
   
   if (state.currentTrick.cards.length === 4) {
-    // Trick complete
-    const winner = determineTrickWinner(state.currentTrick, state.trumpSuit);
-    state.currentTrick.winnerSeat = winner.seat;
-    state.completedTricks.push({ ...state.currentTrick });
-
-    const winnerTeam = SEAT_TEAM[winner.seat];
-    if (winnerTeam === 'team1') state.team1TricksWon++;
-    else state.team2TricksWon++;
-
-    state.lastMessage = `${state.players[winner.seat]?.name} לקח את הלקיחה`;
-
-    // Check for technical capo - only need first trick
-    if (state.capoType === CapoType.TECHNICAL && state.completedTricks.length === 1) {
-      return endRound(state);
-    }
-
-    // Check for bid capo - if they lost a trick, end
-    if (state.capoType === CapoType.BID) {
-      const capoTeam = state.biddingTeam!;
-      const otherTeam = capoTeam === 'team1' ? 'team2' : 'team1';
-      const otherWon = otherTeam === 'team1' ? state.team1TricksWon : state.team2TricksWon;
-      if (otherWon > 0) {
-        return endRound(state);
-      }
-    }
-
-    // Check if all tricks played
-    if (state.completedTricks.length === 10) {
-      return endRound(state);
-    }
-
-    // Check if winner is on bidding team and can sing
-    if (state.biddingTeam && winnerTeam === state.biddingTeam && state.trumpSuit) {
-      const canAnySing = checkAnySingingForTeam(state, state.biddingTeam);
-      if (canAnySing) {
-        // Enter singing phase after trick
-        state.phase = GamePhase.SINGING;
-        state.singingAfterTrick = true;
-        // Find first bidding team member who can sing
-        let singingSeat = winner.seat;
-        for (let i = 0; i < 4; i++) {
-          if (SEAT_TEAM[singingSeat] === state.biddingTeam) {
-            const player = state.players[singingSeat];
-            if (player && state.trumpSuit) {
-              const singable = getSingableSuits(player.hand, state.trumpSuit, state.currentBidAmount, state.cantes, singingSeat, state.biddingTeam);
-              if (singable.length > 0) {
-                state.currentTurnSeat = singingSeat;
-                state.lastMessage = `${state.players[singingSeat]?.name} יכול לשיר!`;
-                return state;
-              }
-            }
-          }
-          singingSeat = getNextSeat(singingSeat);
-        }
-      }
-    }
-
-    // Next trick
-    state.trickNumber++;
-    state.currentTurnSeat = winner.seat;
-    state.turnStartedAt = Date.now();
-    state.currentTrick = { cards: [], leadSeat: winner.seat };
+    // Trick complete — mark pending, don't resolve yet (server will delay for display)
+    state.trickPendingResolution = true;
   } else {
     state.currentTurnSeat = getNextSeat(seat);
     state.turnStartedAt = Date.now();
     state.lastMessage = `תור ${state.players[state.currentTurnSeat]?.name}`;
   }
   
+  return state;
+}
+
+export function resolveTrick(state: GameState): GameState {
+  state.trickPendingResolution = false;
+
+  const winner = determineTrickWinner(state.currentTrick, state.trumpSuit);
+  state.currentTrick.winnerSeat = winner.seat;
+  state.completedTricks.push({ ...state.currentTrick });
+
+  const winnerTeam = SEAT_TEAM[winner.seat];
+  if (winnerTeam === 'team1') state.team1TricksWon++;
+  else state.team2TricksWon++;
+
+  state.lastMessage = `${state.players[winner.seat]?.name} לקח את הלקיחה`;
+
+  // Check for technical capo - only need first trick
+  if (state.capoType === CapoType.TECHNICAL && state.completedTricks.length === 1) {
+    return endRound(state);
+  }
+
+  // Check for bid capo - if they lost a trick, end
+  if (state.capoType === CapoType.BID) {
+    const capoTeam = state.biddingTeam!;
+    const otherTeam = capoTeam === 'team1' ? 'team2' : 'team1';
+    const otherWon = otherTeam === 'team1' ? state.team1TricksWon : state.team2TricksWon;
+    if (otherWon > 0) {
+      return endRound(state);
+    }
+  }
+
+  // Check if all tricks played
+  if (state.completedTricks.length === 10) {
+    return endRound(state);
+  }
+
+  // Check if winner is on bidding team and can sing
+  if (state.biddingTeam && winnerTeam === state.biddingTeam && state.trumpSuit) {
+    const canAnySing = checkAnySingingForTeam(state, state.biddingTeam);
+    if (canAnySing) {
+      state.phase = GamePhase.SINGING;
+      state.singingAfterTrick = true;
+      let singingSeat = winner.seat;
+      for (let i = 0; i < 4; i++) {
+        if (SEAT_TEAM[singingSeat] === state.biddingTeam) {
+          const player = state.players[singingSeat];
+          if (player && state.trumpSuit) {
+            const singable = getSingableSuits(player.hand, state.trumpSuit, state.currentBidAmount, state.cantes, singingSeat, state.biddingTeam);
+            if (singable.length > 0) {
+              state.currentTurnSeat = singingSeat;
+              state.lastMessage = `${state.players[singingSeat]?.name} יכול לשיר!`;
+              return state;
+            }
+          }
+        }
+        singingSeat = getNextSeat(singingSeat);
+      }
+    }
+  }
+
+  // Next trick
+  state.trickNumber++;
+  state.currentTurnSeat = winner.seat;
+  state.turnStartedAt = Date.now();
+  state.currentTrick = { cards: [], leadSeat: winner.seat };
+
   return state;
 }
 

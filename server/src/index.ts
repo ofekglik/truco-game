@@ -8,7 +8,7 @@ import {
   createRoom, joinRoom, getRoom, getRoomByCode, removePlayer, isRoomFull, swapSeat, updateRoomSettings, leaveRoom, listRooms, type Room
 } from './rooms/roomManager.js';
 import {
-  startRound, placeBid, declareTrump, singCante, doneSinging, playCard, nextRound, getClientState
+  startRound, placeBid, declareTrump, singCante, doneSinging, playCard, resolveTrick, nextRound, getClientState
 } from './engine/game.js';
 import { GamePhase, SEAT_ORDER, SeatPosition, Suit } from './engine/types.js';
 import { supabase, isSupabaseConfigured } from './lib/supabase.js';
@@ -261,9 +261,19 @@ io.on('connection', (socket) => {
     if (!room) return;
     const seat = room.socketToSeat.get(socket.id);
     if (!seat) return;
-    
+
     playCard(room.state, seat, cardId);
     broadcastState(room);
+
+    // If trick is complete (4 cards), wait 2.5s so players can see all cards, then resolve
+    if (room.state.trickPendingResolution) {
+      setTimeout(() => {
+        if (room.state.trickPendingResolution) {
+          resolveTrick(room.state);
+          broadcastState(room);
+        }
+      }, 2500);
+    }
   });
   
   socket.on('nextRound', () => {

@@ -136,6 +136,7 @@ export interface GameState {
   currentTrick: Trick;
   completedTricks: Trick[];
   trickNumber: number;
+  trickPendingResolution: boolean;
   team1TricksWon: number;
   team2TricksWon: number;
 

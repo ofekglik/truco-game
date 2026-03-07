@@ -173,10 +173,6 @@ export const GameTable: React.FC<GameTableProps> = ({
           setTimeout(() => setTrickToast(null), 2500);
         }
       }
-      // Keep showing the completed trick's cards for 2.5s before clearing
-      setCompletedTrickDisplay(lastTrick.cards);
-      setTimeout(() => setCompletedTrickDisplay(null), 2500);
-
       setLastCompletedTricksLength(gameState.completedTricks.length);
     }
   }, [gameState.completedTricks.length, gameState.team1TricksWon, gameState.team2TricksWon, soundEnabled]);
@@ -348,10 +344,8 @@ export const GameTable: React.FC<GameTableProps> = ({
   };
 
   const renderTrickCards = () => {
-    // Show current trick cards, or if trick just completed, keep showing them for 2.5s
-    const cards = gameState.currentTrick.cards.length > 0
-      ? gameState.currentTrick.cards
-      : completedTrickDisplay || [];
+    // Show current trick cards (server keeps them visible for 2.5s after trick completes)
+    const cards = gameState.currentTrick.cards;
     if (cards.length === 0) return null;
 
     // Tight cluster in center — small directional offsets so all 4 cards are visible
