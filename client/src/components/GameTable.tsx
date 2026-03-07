@@ -366,9 +366,77 @@ export const GameTable: React.FC<GameTableProps> = ({
     // All possible bid values from 70 to 220 in steps of 10
     const allBids = Array.from({ length: 16 }, (_, i) => 70 + i * 10);
 
+    if (isMobile) {
+      // Mobile: full-width bottom sheet pinned to bottom of screen
+      return (
+        <>
+          {/* Backdrop */}
+          <div className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm animate-fadeIn" />
+
+          <div className="fixed bottom-0 left-0 right-0 z-50 animate-slideUpBottom">
+            <div className="bg-[#16213e] rounded-t-2xl shadow-2xl border-t border-[#4a5a7e]/60 overflow-hidden">
+
+              {/* Drag handle */}
+              <div className="flex justify-center pt-2 pb-1">
+                <div className="w-10 h-1 bg-gray-500 rounded-full" />
+              </div>
+
+              {/* Header: current bid status */}
+              <div className="px-4 py-2 flex items-center justify-between" dir="rtl">
+                <span className="text-white text-sm font-bold">תורך להציע</span>
+                {gameState.currentBidAmount > 0 ? (
+                  <span className="text-yellow-400 text-sm font-bold">
+                    נוכחי: {gameState.currentBidAmount} ({gameState.players[gameState.currentBidWinner!]?.name})
+                  </span>
+                ) : (
+                  <span className="text-gray-500 text-xs">אין הצעות עדיין</span>
+                )}
+              </div>
+
+              {/* Bid grid — 4 cols, compact */}
+              <div className="px-3 pb-2">
+                <div className="grid grid-cols-4 gap-1.5">
+                  {allBids.map(val => {
+                    const isDisabled = val < minBid;
+                    return (
+                      <button
+                        key={val}
+                        onClick={() => !isDisabled && onPlaceBid(val)}
+                        disabled={isDisabled}
+                        className={`py-2.5 rounded-xl font-bold text-base transition-all ${
+                          isDisabled
+                            ? 'bg-gray-800/40 text-gray-600 cursor-not-allowed'
+                            : 'bg-[#2a3a5e] hover:bg-yellow-500 hover:text-black text-white active:scale-95 active:bg-yellow-500 active:text-black'
+                        }`}
+                      >
+                        {val}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Bottom actions: Pass + Capo */}
+              <div className="px-3 pb-4 pt-1 flex gap-2">
+                <button onClick={onPassBid}
+                  className="flex-1 py-3 bg-gray-700/80 hover:bg-gray-600 text-white font-bold rounded-xl transition-colors text-base active:scale-95">
+                  עבור ❌
+                </button>
+                <button onClick={() => onPlaceBid(230)}
+                  className="flex-1 py-3 bg-red-600 hover:bg-red-500 text-white font-bold rounded-xl transition-colors text-base active:scale-95">
+                  קאפו! 💥
+                </button>
+              </div>
+            </div>
+          </div>
+        </>
+      );
+    }
+
+    // Desktop: floating panel above hand
     return (
       <div className="absolute left-1/2 -translate-x-1/2 z-30 animate-slideUpBottom"
-        style={{ bottom: isMobile ? '180px' : '240px', width: isMobile ? 'calc(100% - 16px)' : '420px' }}>
+        style={{ bottom: '240px', width: '420px' }}>
         <div className="bg-[#16213e]/95 backdrop-blur-md rounded-2xl shadow-2xl border border-[#4a5a7e]/60 overflow-hidden">
 
           {/* Header: current bid status */}
@@ -385,7 +453,7 @@ export const GameTable: React.FC<GameTableProps> = ({
 
           {/* Bid grid */}
           <div className="p-3">
-            <div className={`grid gap-1.5 ${isMobile ? 'grid-cols-4' : 'grid-cols-5'}`}>
+            <div className="grid grid-cols-5 gap-1.5">
               {allBids.map(val => {
                 const isDisabled = val < minBid;
                 return (
@@ -425,14 +493,45 @@ export const GameTable: React.FC<GameTableProps> = ({
   const renderTrumpPanel = () => {
     if (gameState.phase !== GamePhase.TRUMP_DECLARATION || !validActions.canDeclareTrump) return null;
 
+    if (isMobile) {
+      // Mobile: fixed bottom sheet
+      return (
+        <>
+          <div className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm animate-fadeIn" />
+          <div className="fixed bottom-0 left-0 right-0 z-50 animate-slideUpBottom">
+            <div className="bg-[#16213e] rounded-t-2xl shadow-2xl border-t border-[#4a5a7e]/60 overflow-hidden">
+              <div className="flex justify-center pt-2 pb-1">
+                <div className="w-10 h-1 bg-gray-500 rounded-full" />
+              </div>
+              <p className="text-center text-yellow-400 font-bold text-lg px-4 pb-3">בחר אטו (חליפה שולטת)</p>
+              <div className="grid grid-cols-2 gap-2.5 px-4 pb-5">
+                {Object.values(Suit).map(suit => (
+                  <button
+                    key={suit}
+                    onClick={() => onDeclareTrump(suit)}
+                    className="py-4 px-4 rounded-xl font-bold text-lg transition-all active:scale-95 border-2"
+                    style={{
+                      backgroundColor: SUIT_COLORS[suit] + '33',
+                      borderColor: SUIT_COLORS[suit],
+                      color: SUIT_COLORS[suit],
+                    }}
+                  >
+                    {SUIT_SYMBOLS[suit]} {SUIT_NAMES_HE[suit]}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </>
+      );
+    }
+
+    // Desktop: centered floating panel
     return (
       <>
-        {/* Semi-transparent backdrop - stops above the hand area */}
-        <div className="absolute inset-0 bottom-48 z-29 bg-black/40 backdrop-blur-sm animate-fadeIn" />
-
-        {/* Centered trump panel - positioned above the hand */}
+        <div className="absolute inset-0 z-29 bg-black/40 backdrop-blur-sm animate-fadeIn" />
         <div className="absolute left-1/2 -translate-x-1/2 z-30 animate-slideUpBottom"
-          style={{ bottom: isMobile ? '210px' : '220px', width: isMobile ? '90%' : '340px' }}>
+          style={{ bottom: '220px', width: '340px' }}>
           <div className="bg-[#16213e] rounded-2xl p-4 shadow-2xl border border-[#2a3a5e]">
             <p className="text-center text-yellow-400 font-bold mb-4 text-base">בחר אטו (חליפה שולטת)</p>
             <div className="grid grid-cols-2 gap-3">
@@ -461,45 +560,64 @@ export const GameTable: React.FC<GameTableProps> = ({
     const isBiddingTeam = gameState.biddingTeam && SEAT_TEAM[gameState.mySeat] === gameState.biddingTeam;
     if (gameState.phase !== GamePhase.SINGING || !isBiddingTeam) return null;
 
+    const singingContent = (
+      <>
+        <p className="text-center text-yellow-400 font-bold mb-4 text-lg">שירה</p>
+        {validActions.singableCantes.length > 0 && (
+          <div className="space-y-2.5 mb-4">
+            {validActions.singableCantes.map(suit => (
+              <button
+                key={suit}
+                onClick={() => onSingCante(suit)}
+                className="w-full py-3.5 px-4 rounded-xl font-bold text-base transition-all active:scale-95 border-2"
+                style={{
+                  backgroundColor: SUIT_COLORS[suit] + '33',
+                  borderColor: SUIT_COLORS[suit],
+                  color: SUIT_COLORS[suit],
+                }}
+              >
+                שר {SUIT_SYMBOLS[suit]} {SUIT_NAMES_HE[suit]} ({suit === gameState.trumpSuit ? '40' : '20'} נק׳)
+              </button>
+            ))}
+          </div>
+        )}
+        {validActions.singableCantes.length === 0 && (
+          <p className="text-center text-gray-400 text-sm mb-4">אין שירה אפשרית</p>
+        )}
+        <button onClick={onDoneSinging}
+          className="w-full py-3.5 bg-gray-700 hover:bg-gray-600 text-white font-bold rounded-xl transition-colors text-base active:scale-95">
+          סיים שירה
+        </button>
+      </>
+    );
+
+    if (isMobile) {
+      return (
+        <>
+          <div className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm animate-fadeIn" />
+          <div className="fixed bottom-0 left-0 right-0 z-50 animate-slideUpBottom">
+            <div className="bg-[#16213e] rounded-t-2xl shadow-2xl border-t border-[#4a5a7e]/60 overflow-hidden">
+              <div className="flex justify-center pt-2 pb-1">
+                <div className="w-10 h-1 bg-gray-500 rounded-full" />
+              </div>
+              <div className="px-4 pb-5">
+                {singingContent}
+              </div>
+            </div>
+          </div>
+        </>
+      );
+    }
+
     return (
       <>
-        {/* Semi-transparent backdrop */}
         <div className="absolute inset-0 z-29 bg-black/50 backdrop-blur-sm animate-fadeIn" />
-
-        {/* Bottom sheet modal */}
         <div className="absolute bottom-0 left-0 right-0 z-30 animate-slideUpBottom">
-          {/* Drag handle */}
           <div className="flex justify-center pt-3 pb-2">
             <div className="w-12 h-1 bg-gray-500 rounded-full" />
           </div>
-
           <div className="bg-[#16213e] rounded-t-3xl p-6 shadow-2xl">
-            <p className="text-center text-yellow-400 font-bold mb-6 text-lg">שירה</p>
-            {validActions.singableCantes.length > 0 && (
-              <div className="space-y-3 mb-4">
-                {validActions.singableCantes.map(suit => (
-                  <button
-                    key={suit}
-                    onClick={() => onSingCante(suit)}
-                    className="w-full py-3 px-4 rounded-xl font-bold transition-all hover:scale-105 border-2"
-                    style={{
-                      backgroundColor: SUIT_COLORS[suit] + '33',
-                      borderColor: SUIT_COLORS[suit],
-                      color: SUIT_COLORS[suit],
-                    }}
-                  >
-                    שר {SUIT_SYMBOLS[suit]} {SUIT_NAMES_HE[suit]} ({suit === gameState.trumpSuit ? '40' : '20'} נק׳)
-                  </button>
-                ))}
-              </div>
-            )}
-            {validActions.singableCantes.length === 0 && (
-              <p className="text-center text-gray-400 text-sm mb-4">אין שירה אפשרית</p>
-            )}
-            <button onClick={onDoneSinging}
-              className="w-full py-3 bg-gray-700 hover:bg-gray-600 text-white font-bold rounded-xl transition-colors">
-              סיים שירה
-            </button>
+            {singingContent}
           </div>
         </div>
       </>
@@ -515,7 +633,7 @@ export const GameTable: React.FC<GameTableProps> = ({
     const biddingFell = lastRound.biddingTeamFell;
 
     return (
-      <div className="absolute inset-0 z-40 bg-black/75 flex items-center justify-center backdrop-blur-md animate-fadeIn">
+      <div className={`${isMobile ? 'fixed' : 'absolute'} inset-0 z-40 bg-black/75 flex items-center justify-center backdrop-blur-md animate-fadeIn`}>
         <div className="bg-gradient-to-b from-[#1a2744] to-[#111b30] border border-[#3a4a6e] rounded-2xl p-5 w-full max-w-sm shadow-2xl animate-slideUpBottom mx-4">
           {/* Header with emoji */}
           <div className="text-center mb-4">
