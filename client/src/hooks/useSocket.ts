@@ -9,13 +9,32 @@ interface RoomInfo {
   playerName: string;
 }
 
+const ROOM_STORAGE_KEY = 'ato_room_info';
+
+function saveRoomInfo(info: RoomInfo | null) {
+  if (info) {
+    sessionStorage.setItem(ROOM_STORAGE_KEY, JSON.stringify(info));
+  } else {
+    sessionStorage.removeItem(ROOM_STORAGE_KEY);
+  }
+}
+
+function loadRoomInfo(): RoomInfo | null {
+  try {
+    const stored = sessionStorage.getItem(ROOM_STORAGE_KEY);
+    return stored ? JSON.parse(stored) : null;
+  } catch {
+    return null;
+  }
+}
+
 export function useSocket() {
   const socketRef = useRef<Socket | null>(null);
-  const roomInfoRef = useRef<RoomInfo | null>(null);
+  const roomInfoRef = useRef<RoomInfo | null>(loadRoomInfo());
   const [connected, setConnected] = useState(false);
   const [reconnecting, setReconnecting] = useState(false);
   const [gameState, setGameState] = useState<ClientGameState | null>(null);
-  const [roomInfo, setRoomInfo] = useState<RoomInfo | null>(null);
+  const [roomInfo, setRoomInfo] = useState<RoomInfo | null>(loadRoomInfo());
   const [error, setError] = useState<string | null>(null);
   const [roomsList, setRoomsList] = useState<RoomSummary[]>([]);
 
@@ -44,10 +63,10 @@ export function useSocket() {
       socket.on('connect', () => {
         setConnected(true);
         setReconnecting(false);
-        // Auto-rejoin room after reconnection (e.g. iPhone background/lock)
+        // Auto-rejoin room after reconnection or page refresh
         const info = roomInfoRef.current;
         if (info) {
-          console.log(`[socket] reconnected, rejoining room ${info.roomCode} as ${info.playerName}`);
+          console.log(`[socket] reconnecting to room ${info.roomCode} as ${info.playerName}`);
           socket.emit('rejoinRoom', { roomCode: info.roomCode, playerName: info.playerName });
         }
       });
@@ -59,9 +78,19 @@ export function useSocket() {
       socket.on('roomJoined', (data: RoomInfo) => {
         setRoomInfo(data);
         roomInfoRef.current = data;
+        saveRoomInfo(data);
         setError(null);
       });
-      socket.on('roomError', (msg: string) => setError(msg));
+      socket.on('roomError', (msg: string) => {
+        setError(msg);
+        // If rejoin failed (room no longer exists), clear stored info
+        if (roomInfoRef.current && !gameState) {
+          console.log('[socket] rejoin failed, clearing stored room info');
+          roomInfoRef.current = null;
+          setRoomInfo(null);
+          saveRoomInfo(null);
+        }
+      });
       socket.on('roomsList', (rooms: RoomSummary[]) => setRoomsList(rooms));
 
       return () => {
@@ -129,6 +158,7 @@ export function useSocket() {
     // Clear local state so user returns to lobby
     setRoomInfo(null);
     roomInfoRef.current = null;
+    saveRoomInfo(null);
     setGameState(null);
     setError(null);
   }, []);
