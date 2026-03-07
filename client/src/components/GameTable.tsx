@@ -1227,86 +1227,51 @@ export const GameTable: React.FC<GameTableProps> = ({
         </div>
       )}
 
-      {/* === Top HUD — compact on mobile === */}
+      {/* === Top HUD — single unified bar with score + trump === */}
 
-      {/* === Top HUD — score pill centered, trump top-left === */}
-
-      {/* Trump badge — top-left corner, both mobile and desktop */}
-      {gameState.trumpSuit && (
-        <div className={`absolute z-20 pointer-events-none ${isMobile ? 'top-1 left-1' : 'top-3 left-4'}`}>
-          <div className={`flex items-center gap-1.5 backdrop-blur-sm border-2 ${isMobile ? 'rounded-lg px-2 py-1' : 'rounded-xl px-3 py-1.5'}`}
-            style={{
-              backgroundColor: `${SUIT_COLORS[gameState.trumpSuit]}22`,
-              borderColor: SUIT_COLORS[gameState.trumpSuit],
-              boxShadow: `0 0 10px ${SUIT_COLORS[gameState.trumpSuit]}44`,
-            }}>
-            <span className={isMobile ? 'text-sm' : 'text-xl'} style={{ color: SUIT_COLORS[gameState.trumpSuit] }}>
-              {SUIT_SYMBOLS[gameState.trumpSuit]}
-            </span>
-            <span className={`font-bold ${isMobile ? 'text-[9px]' : 'text-xs'}`} style={{ color: SUIT_COLORS[gameState.trumpSuit] }}>
-              {SUIT_NAMES_HE[gameState.trumpSuit]}
-            </span>
-            {gameState.currentBidWinner && gameState.players[gameState.currentBidWinner] && (
-              <span className={`text-gray-300 ${isMobile ? 'text-[8px]' : 'text-[10px]'}`}>
-                {gameState.players[gameState.currentBidWinner]!.name} {gameState.currentBidAmount}
-              </span>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Score pill — top center */}
       <button
         onClick={() => setShowScorePill(!showScorePill)}
         className={`absolute top-1 left-1/2 -translate-x-1/2 z-20 ${
           isMobile
             ? 'bg-black/70 backdrop-blur-sm rounded-full px-3 py-1 text-[10px] font-bold border border-gray-700 flex items-center gap-1.5'
-            : 'transition-all'
+            : 'bg-gradient-to-r from-blue-900/80 to-red-900/80 backdrop-blur-sm rounded-full px-4 py-2 text-sm font-bold border border-gray-600 hover:border-yellow-400 hover:shadow-lg hover:shadow-yellow-400/50 flex items-center gap-2 transition-all'
         }`}
       >
-        {isMobile ? (
+        {/* Trump info — left side of pill */}
+        {gameState.trumpSuit && (
           <>
-            <span className="text-blue-400">{gameState.scores.team1}</span>
-            <span className="text-gray-500">-</span>
-            <span className="text-red-400">{gameState.scores.team2}</span>
-            <span className="text-gray-600 mx-0.5">|</span>
-            <span className="text-gray-400">{gameState.trickNumber}/10</span>
-            <span className="text-gray-600 mx-0.5">|</span>
-            <span className="text-blue-400">{gameState.team1TricksWon}</span>
-            <span className="text-gray-500">-</span>
-            <span className="text-red-400">{gameState.team2TricksWon}</span>
-            {gameState.cantes.map((c, ci) => (
-              <span key={ci} className="text-[9px]" style={{ color: SUIT_COLORS[c.suit] }}>
-                {SUIT_SYMBOLS[c.suit]}{c.points}
-              </span>
-            ))}
+            <span className={isMobile ? 'text-xs' : 'text-base'} style={{ color: SUIT_COLORS[gameState.trumpSuit] }}>
+              {SUIT_SYMBOLS[gameState.trumpSuit]}
+            </span>
+            <span className={`font-bold ${isMobile ? 'text-[9px]' : 'text-xs'}`} style={{ color: SUIT_COLORS[gameState.trumpSuit] }}>
+              {gameState.currentBidAmount}
+            </span>
+            <span className="text-gray-600">|</span>
           </>
-        ) : (
-          <div className="bg-gradient-to-r from-blue-900/80 to-red-900/80 backdrop-blur-sm rounded-full px-4 py-2 text-sm font-bold border border-gray-600 hover:border-yellow-400 hover:shadow-lg hover:shadow-yellow-400/50 flex items-center gap-2">
-            <span className="text-blue-400">{gameState.scores.team1}</span>
-            <span className="text-gray-500">-</span>
-            <span className="text-red-400">{gameState.scores.team2}</span>
-            <span className="text-gray-600">|</span>
-            <span className="text-gray-400 text-xs">{gameState.trickNumber}/10</span>
-            <span className="text-gray-600">|</span>
-            <span className="text-blue-400 text-xs">{gameState.team1TricksWon}</span>
-            <span className="text-gray-500 text-xs">-</span>
-            <span className="text-red-400 text-xs">{gameState.team2TricksWon}</span>
-          </div>
         )}
-      </button>
 
-      {/* Singing indicators — top-right corner on desktop, inside score pill on mobile */}
-      {!isMobile && gameState.cantes.length > 0 && (
-        <div className="absolute top-3 right-4 z-20 flex gap-2 flex-wrap justify-end max-w-xs">
-          {gameState.cantes.map((c, ci) => (
-            <div key={ci} className="bg-black/60 backdrop-blur-sm rounded-lg px-2 py-1 text-xs"
-              style={{ color: SUIT_COLORS[c.suit] }}>
-              {SUIT_SYMBOLS[c.suit]} {c.points} נק׳
-            </div>
-          ))}
-        </div>
-      )}
+        {/* Scores */}
+        <span className="text-blue-400">{gameState.scores.team1}</span>
+        <span className="text-gray-500">-</span>
+        <span className="text-red-400">{gameState.scores.team2}</span>
+        <span className="text-gray-600 mx-0.5">|</span>
+
+        {/* Trick count */}
+        <span className={`text-gray-400 ${isMobile ? '' : 'text-xs'}`}>{gameState.trickNumber}/10</span>
+        <span className="text-gray-600 mx-0.5">|</span>
+
+        {/* Tricks won */}
+        <span className={`text-blue-400 ${isMobile ? '' : 'text-xs'}`}>{gameState.team1TricksWon}</span>
+        <span className={`text-gray-500 ${isMobile ? '' : 'text-xs'}`}>-</span>
+        <span className={`text-red-400 ${isMobile ? '' : 'text-xs'}`}>{gameState.team2TricksWon}</span>
+
+        {/* Cantes inline */}
+        {gameState.cantes.map((c, ci) => (
+          <span key={ci} className={isMobile ? 'text-[9px]' : 'text-xs'} style={{ color: SUIT_COLORS[c.suit] }}>
+            {SUIT_SYMBOLS[c.suit]}{c.points}
+          </span>
+        ))}
+      </button>
 
       {/* Score Pill Expanded */}
       {showScorePill && (
