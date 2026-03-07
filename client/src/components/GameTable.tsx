@@ -1302,7 +1302,7 @@ export const GameTable: React.FC<GameTableProps> = ({
       {isMobile ? (
         <div className="absolute left-0 right-0 z-20 transition-all duration-200" style={{
           height: isLandscape ? '95px' : '105px',
-          bottom: panelCollapsed && (gameState.phase === GamePhase.TRUMP_DECLARATION || gameState.phase === GamePhase.SINGING) ? '52px' : '0px',
+          bottom: panelCollapsed && gameState.phase === GamePhase.TRUMP_DECLARATION ? '52px' : '0px',
         }}>
           <div
             ref={handScrollRef}
