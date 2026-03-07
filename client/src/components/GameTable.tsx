@@ -1192,19 +1192,19 @@ export const GameTable: React.FC<GameTableProps> = ({
             ))}
           </button>
 
-          {/* Mobile: Trump + bid info — centered on board, above trick cards */}
+          {/* Mobile: Trump + bid info — right side of board, next to trick cards */}
           {gameState.trumpSuit && (
-            <div className="absolute inset-0 flex items-center justify-center z-[15] pointer-events-none">
-              <div className="flex flex-col items-center gap-0.5 opacity-40">
-                <span className="text-3xl" style={{ color: SUIT_COLORS[gameState.trumpSuit] }}>
+            <div className="absolute right-2 top-1/2 -translate-y-1/2 z-[15] pointer-events-none">
+              <div className="flex flex-col items-center gap-0.5 opacity-60">
+                <span className="text-2xl" style={{ color: SUIT_COLORS[gameState.trumpSuit] }}>
                   {SUIT_SYMBOLS[gameState.trumpSuit]}
                 </span>
-                <span className="text-xs font-bold" style={{ color: SUIT_COLORS[gameState.trumpSuit] }}>
+                <span className="text-[10px] font-bold" style={{ color: SUIT_COLORS[gameState.trumpSuit] }}>
                   {SUIT_NAMES_HE[gameState.trumpSuit]}
                 </span>
                 {gameState.currentBidWinner && gameState.players[gameState.currentBidWinner] && (
-                  <span className="text-[10px] text-gray-300">
-                    {gameState.players[gameState.currentBidWinner]!.name} • {gameState.currentBidAmount}
+                  <span className="text-[8px] text-gray-300">
+                    {gameState.currentBidAmount}
                   </span>
                 )}
               </div>
@@ -1233,11 +1233,11 @@ export const GameTable: React.FC<GameTableProps> = ({
             <span className="text-red-400">{gameState.team2TricksWon}</span>
           </div>
 
-          {/* Desktop: Trump + bid info — centered on board, above trick cards */}
+          {/* Desktop: Trump + bid info — right side of board, next to trick cards */}
           {gameState.trumpSuit && (
-            <div className="absolute inset-0 flex items-center justify-center z-[15] pointer-events-none">
-              <div className="flex flex-col items-center gap-1 opacity-35">
-                <span className="text-5xl" style={{ color: SUIT_COLORS[gameState.trumpSuit] }}>
+            <div className="absolute right-6 top-1/2 -translate-y-1/2 z-[15] pointer-events-none">
+              <div className="flex flex-col items-center gap-1 opacity-50">
+                <span className="text-4xl" style={{ color: SUIT_COLORS[gameState.trumpSuit] }}>
                   {SUIT_SYMBOLS[gameState.trumpSuit]}
                 </span>
                 <span className="text-sm font-bold" style={{ color: SUIT_COLORS[gameState.trumpSuit] }}>
