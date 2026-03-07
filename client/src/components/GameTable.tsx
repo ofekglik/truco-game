@@ -372,7 +372,7 @@ export const GameTable: React.FC<GameTableProps> = ({
             top: '50%',
             transform: `translate(calc(-50% + ${pos.x}px), calc(-50% + ${pos.y}px))`,
             animationDelay: `${i * 100}ms`,
-            zIndex: 10 + i,
+            zIndex: 10 + CARD_POWER[tc.card.rank],
           }}
         >
           <CardComponent
