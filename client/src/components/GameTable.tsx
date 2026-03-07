@@ -79,6 +79,7 @@ export const GameTable: React.FC<GameTableProps> = ({
   const [windowHeight, setWindowHeight] = useState(window.innerHeight);
   const [showScorePill, setShowScorePill] = useState(false);
   const [draggingCardId, setDraggingCardId] = useState<string | null>(null);
+  const [focusedTrickCard, setFocusedTrickCard] = useState<string | null>(null);
   const [panelCollapsed, setPanelCollapsed] = useState(false);
   const [mobileBidValue, setMobileBidValue] = useState(70);
   // completedTrickDisplay removed — server now handles the 2.5s trick display delay
@@ -384,17 +385,26 @@ export const GameTable: React.FC<GameTableProps> = ({
       const relPos = getRelativePosition(gameState.mySeat, tc.seat);
       const pos = positionMap[relPos] || { x: 0, y: 0 };
 
+      const cardKey = `${tc.seat}-${tc.card.id}`;
+      const isFocused = focusedTrickCard === cardKey;
+
       return (
         <div
-          key={`${tc.seat}-${tc.card.id}`}
-          className="absolute z-10 animate-slideIn"
+          key={cardKey}
+          className="absolute z-10 animate-slideIn cursor-pointer select-none"
           style={{
             left: '50%',
             top: '50%',
-            transform: `translate(calc(-50% + ${pos.x}px), calc(-50% + ${pos.y}px))`,
+            transform: `translate(calc(-50% + ${pos.x}px), calc(-50% + ${pos.y}px))${isFocused ? ' scale(1.1)' : ''}`,
             animationDelay: `${i * 100}ms`,
-            zIndex: 10 + CARD_POWER[tc.card.rank],
+            zIndex: isFocused ? 100 : 10 + CARD_POWER[tc.card.rank],
+            transition: 'transform 0.15s ease, z-index 0s',
           }}
+          onMouseDown={() => setFocusedTrickCard(cardKey)}
+          onMouseUp={() => setFocusedTrickCard(null)}
+          onMouseLeave={() => setFocusedTrickCard(null)}
+          onTouchStart={() => setFocusedTrickCard(cardKey)}
+          onTouchEnd={() => setFocusedTrickCard(null)}
         >
           <CardComponent
             card={tc.card}
