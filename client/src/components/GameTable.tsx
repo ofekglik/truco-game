@@ -1217,9 +1217,8 @@ export const GameTable: React.FC<GameTableProps> = ({
 
       {isMobile ? (
         <>
-          {/* Mobile top bar: trick counter + trump + score in one compact row */}
+          {/* Mobile top-left: trick counter + score */}
           <div className="absolute top-1 left-1 right-10 z-20 flex items-center gap-1.5 flex-wrap">
-            {/* Trick counter */}
             <div className="bg-black/60 backdrop-blur-sm rounded-md px-2 py-1 text-[10px]">
               <span className="text-gray-400">לקיחה </span>
               <span className="text-white font-bold">{gameState.trickNumber}/10</span>
@@ -1229,18 +1228,6 @@ export const GameTable: React.FC<GameTableProps> = ({
               <span className="text-red-400">{gameState.team2TricksWon}</span>
             </div>
 
-            {/* Trump badge inline */}
-            {gameState.trumpSuit && (
-              <div className="rounded-md px-2 py-1 backdrop-blur-sm border text-[10px]"
-                style={{
-                  backgroundColor: `${SUIT_COLORS[gameState.trumpSuit]}22`,
-                  borderColor: SUIT_COLORS[gameState.trumpSuit],
-                  color: SUIT_COLORS[gameState.trumpSuit],
-                }}>
-                <span className="font-bold">{SUIT_SYMBOLS[gameState.trumpSuit]} {SUIT_NAMES_HE[gameState.trumpSuit]}</span>
-              </div>
-            )}
-
             {/* Score pill */}
             <button onClick={() => setShowScorePill(!showScorePill)}
               className="bg-black/60 backdrop-blur-sm rounded-md px-2 py-1 text-[10px] font-bold border border-gray-700">
@@ -1249,7 +1236,7 @@ export const GameTable: React.FC<GameTableProps> = ({
               <span className="text-red-400">{gameState.scores.team2}</span>
             </button>
 
-            {/* Singing indicators inline */}
+            {/* Singing indicators */}
             {gameState.cantes.map((c, i) => (
               <div key={i} className="bg-black/60 backdrop-blur-sm rounded-md px-1.5 py-1 text-[9px]"
                 style={{ color: SUIT_COLORS[c.suit] }}>
@@ -1258,9 +1245,35 @@ export const GameTable: React.FC<GameTableProps> = ({
             ))}
           </div>
 
-          {/* Mobile message bar — below top row */}
-          <div className="absolute top-8 left-2 right-10 z-20">
-            <div className={`px-3 py-1 rounded-md text-xs font-medium backdrop-blur-sm truncate ${
+          {/* Mobile: Trump + bid info — positioned below top bar, not overlapping players */}
+          {gameState.trumpSuit && (
+            <div className="absolute top-8 left-1 z-20">
+              <div className="rounded-lg px-2.5 py-1.5 backdrop-blur-sm border-2 shadow-lg flex items-center gap-1.5"
+                style={{
+                  backgroundColor: `${SUIT_COLORS[gameState.trumpSuit]}22`,
+                  borderColor: SUIT_COLORS[gameState.trumpSuit],
+                  boxShadow: `0 0 12px ${SUIT_COLORS[gameState.trumpSuit]}66`,
+                }}>
+                <span className="text-lg" style={{ color: SUIT_COLORS[gameState.trumpSuit] }}>
+                  {SUIT_SYMBOLS[gameState.trumpSuit]}
+                </span>
+                <div className="flex flex-col leading-tight">
+                  <span className="text-[10px] font-bold" style={{ color: SUIT_COLORS[gameState.trumpSuit] }}>
+                    {SUIT_NAMES_HE[gameState.trumpSuit]}
+                  </span>
+                  {gameState.currentBidWinner && gameState.players[gameState.currentBidWinner] && (
+                    <span className="text-[8px] text-gray-300">
+                      {gameState.players[gameState.currentBidWinner]!.name} • {gameState.currentBidAmount}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Mobile message bar */}
+          <div className="absolute top-8 right-10 z-20" style={{ left: gameState.trumpSuit ? '110px' : '8px' }}>
+            <div className={`px-3 py-1.5 rounded-md text-xs font-medium backdrop-blur-sm truncate ${
               isMyTurn ? 'bg-yellow-600/80 text-black' : 'bg-black/60 text-gray-200'
             }`}>
               {gameState.lastMessage}
@@ -1270,7 +1283,7 @@ export const GameTable: React.FC<GameTableProps> = ({
         </>
       ) : (
         <>
-          {/* Desktop: original layout */}
+          {/* Desktop top-left: trick counter */}
           <div className="absolute top-3 left-4 z-20 bg-black/60 backdrop-blur-sm rounded-lg px-3 py-1.5 text-sm">
             <span className="text-gray-400">לקיחה: </span>
             <span className="text-white font-bold">{gameState.trickNumber}/10</span>
@@ -1280,10 +1293,11 @@ export const GameTable: React.FC<GameTableProps> = ({
             <span className="text-red-400">{gameState.team2TricksWon}</span>
           </div>
 
+          {/* Desktop: Trump badge — top-right corner, away from players */}
           {gameState.trumpSuit && (
-            <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20">
+            <div className="absolute top-3 right-16 z-20">
               <div
-                className="rounded-xl px-5 py-3 backdrop-blur-md border-2 shadow-lg transition-all"
+                className="rounded-xl px-4 py-2.5 backdrop-blur-md border-2 shadow-lg transition-all"
                 style={{
                   backgroundColor: `${SUIT_COLORS[gameState.trumpSuit]}22`,
                   borderColor: SUIT_COLORS[gameState.trumpSuit],
@@ -1298,23 +1312,33 @@ export const GameTable: React.FC<GameTableProps> = ({
                       {SUIT_NAMES_HE[gameState.trumpSuit]}
                     </span>
                   </div>
+                  {gameState.currentBidWinner && gameState.players[gameState.currentBidWinner] && (
+                    <div className="border-l border-gray-600 pl-2 ml-1 flex flex-col">
+                      <span className="text-[10px] text-gray-400">
+                        {gameState.players[gameState.currentBidWinner]!.avatar} {gameState.players[gameState.currentBidWinner]!.name}
+                      </span>
+                      <span className="text-xs font-bold text-yellow-400">{gameState.currentBidAmount}</span>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
           )}
 
+          {/* Desktop: Score pill — top center */}
           <button
             onClick={() => setShowScorePill(!showScorePill)}
-            className="absolute top-16 left-1/2 -translate-x-1/2 z-20 transition-all"
+            className="absolute top-3 left-1/2 -translate-x-1/2 z-20 transition-all"
           >
             <div className="bg-gradient-to-r from-blue-900/80 to-red-900/80 backdrop-blur-sm rounded-full px-4 py-2 text-sm font-bold border border-gray-600 hover:border-yellow-400 hover:shadow-lg hover:shadow-yellow-400/50">
-              <span className="text-blue-400">🔵{gameState.scores.team1}</span>
+              <span className="text-blue-400">{gameState.scores.team1}</span>
               <span className="text-gray-500 mx-2">-</span>
-              <span className="text-red-400">🔴{gameState.scores.team2}</span>
+              <span className="text-red-400">{gameState.scores.team2}</span>
             </div>
           </button>
 
-          <div className="absolute top-28 left-1/2 -translate-x-1/2 z-20">
+          {/* Desktop: Message bar below score */}
+          <div className="absolute top-14 left-1/2 -translate-x-1/2 z-20">
             <div className={`px-4 py-2 rounded-full text-sm font-medium backdrop-blur-sm ${
               isMyTurn ? 'bg-yellow-600/80 text-black' : 'bg-black/60 text-gray-200'
             }`}>
@@ -1323,8 +1347,9 @@ export const GameTable: React.FC<GameTableProps> = ({
             </div>
           </div>
 
+          {/* Desktop: Singing indicators — below message */}
           {gameState.cantes.length > 0 && (
-            <div className="absolute top-16 left-1/2 -translate-x-1/2 z-20 flex gap-2 flex-wrap justify-center max-w-xs">
+            <div className="absolute top-24 left-1/2 -translate-x-1/2 z-20 flex gap-2 flex-wrap justify-center max-w-xs">
               {gameState.cantes.map((c, i) => (
                 <div key={i} className="bg-black/60 backdrop-blur-sm rounded-lg px-2 py-1 text-xs"
                   style={{ color: SUIT_COLORS[c.suit] }}>
