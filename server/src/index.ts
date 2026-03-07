@@ -100,8 +100,20 @@ function setUpTurnTimer(room: Room) {
   // Set new timer if in a phase that needs one
   const phasesNeedingTimer = [GamePhase.BIDDING, GamePhase.TRICK_PLAY, GamePhase.TRUMP_DECLARATION, GamePhase.SINGING];
   if (phasesNeedingTimer.includes(state.phase)) {
+    // Snapshot state at timer creation to detect stale timers
+    const timerPhase = state.phase;
+    const timerSeat = state.currentTurnSeat;
+    const timerRound = state.roundNumber;
+    const timerTrick = state.trickNumber;
+
     const timer = setTimeout(() => {
-      // Auto-action for timeout
+      // Verify this timer is still relevant (not stale)
+      if (state.phase !== timerPhase || state.currentTurnSeat !== timerSeat ||
+          state.roundNumber !== timerRound || state.trickNumber !== timerTrick) {
+        console.log(`[turnTimeout] STALE timer ignored: was for round=${timerRound} trick=${timerTrick} phase=${timerPhase} seat=${timerSeat}, now round=${state.roundNumber} trick=${state.trickNumber} phase=${state.phase} seat=${state.currentTurnSeat}`);
+        return;
+      }
+
       const socketId = room.seatToSocket.get(state.currentTurnSeat);
       if (!socketId) return;
 
@@ -286,6 +298,12 @@ io.on('connection', (socket) => {
   socket.on('nextRound', () => {
     const room = getRoom(socket.id);
     if (!room) return;
+
+    // Only allow from scoring or game over
+    if (room.state.phase !== GamePhase.ROUND_SCORING && room.state.phase !== GamePhase.GAME_OVER) {
+      console.log(`[nextRound] REJECTED: phase is ${room.state.phase}`);
+      return;
+    }
 
     nextRound(room.state);
     broadcastState(room);

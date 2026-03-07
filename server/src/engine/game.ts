@@ -575,6 +575,11 @@ function endRound(state: GameState): GameState {
 }
 
 export function nextRound(state: GameState): GameState {
+  // Only allow next round from scoring or game over phases
+  if (state.phase !== GamePhase.ROUND_SCORING && state.phase !== GamePhase.GAME_OVER) {
+    console.log(`[nextRound] REJECTED: phase is ${state.phase}, expected ROUND_SCORING or GAME_OVER`);
+    return state;
+  }
   state.dealerSeat = getNextSeat(state.dealerSeat);
   return startRound(state);
 }
