@@ -81,6 +81,18 @@ export const GameTable: React.FC<GameTableProps> = ({
   const [panelCollapsed, setPanelCollapsed] = useState(false);
   const [completedTrickDisplay, setCompletedTrickDisplay] = useState<TrickCard[] | null>(null);
   const handScrollRef = useRef<HTMLDivElement>(null);
+  const panelSwipeRef = useRef<{ startY: number } | null>(null);
+
+  // Swipe-down-to-collapse handlers for bottom sheet panels
+  const handlePanelTouchStart = useCallback((e: React.TouchEvent) => {
+    panelSwipeRef.current = { startY: e.touches[0].clientY };
+  }, []);
+  const handlePanelTouchEnd = useCallback((e: React.TouchEvent) => {
+    if (!panelSwipeRef.current) return;
+    const deltaY = e.changedTouches[0].clientY - panelSwipeRef.current.startY;
+    if (deltaY > 40) setPanelCollapsed(true); // swipe down > 40px = collapse
+    panelSwipeRef.current = null;
+  }, []);
 
   const dragStateRef = useRef<{
     isDragging: boolean;
@@ -250,36 +262,42 @@ export const GameTable: React.FC<GameTableProps> = ({
     handleDragEnd();
   }, [handleDragEnd]);
 
-  const renderTurnTimer = () => {
-    const isCurrentTurnPlayer = isMyTurn;
-    if (!isCurrentTurnPlayer) return null;
-
-    const circumference = 2 * Math.PI * 18;
+  // Turn timer — rendered as a top-of-screen bar visible to all
+  const renderTurnTimerBar = () => {
+    if (gameState.phase !== GamePhase.TRICK_PLAY && gameState.phase !== GamePhase.BIDDING) return null;
     const elapsed = (Date.now() - gameState.turnStartedAt) / 1000;
-    const progress = Math.min(1, elapsed / 60);
-    const offset = circumference * (1 - progress);
-    const isLowTime = elapsed > 50;
+    const remaining = Math.max(0, 60 - elapsed);
+    const progress = Math.max(0, Math.min(1, remaining / 60));
+    const isLowTime = remaining < 10;
+    const turnPlayer = gameState.players[gameState.currentTurnSeat];
+    if (!turnPlayer) return null;
 
     return (
-      <svg width="44" height="44" className="absolute -bottom-12 left-1/2 -translate-x-1/2">
-        <circle
-          cx="22"
-          cy="22"
-          r="18"
-          fill="none"
-          stroke={isLowTime ? '#ef4444' : '#eab308'}
-          strokeWidth="2"
-          strokeDasharray={circumference}
-          strokeDashoffset={offset}
-          strokeLinecap="round"
-          style={{ transition: 'stroke-dashoffset 0.1s linear' }}
+      <div className={`fixed top-0 left-0 right-0 z-30 ${isMobile ? 'h-5' : 'h-6'}`}>
+        {/* Background */}
+        <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
+        {/* Progress bar */}
+        <div
+          className="absolute top-0 left-0 h-full transition-all duration-500 ease-linear"
+          style={{
+            width: `${progress * 100}%`,
+            backgroundColor: isLowTime ? '#ef4444' : isMyTurn ? '#eab308' : '#6b7280',
+          }}
         />
-        {elapsed < 15 && (
-          <text x="22" y="28" textAnchor="middle" className="text-xs font-bold" fill={isLowTime ? '#ef4444' : '#eab308'}>
-            {Math.ceil(60 - elapsed)}
-          </text>
-        )}
-      </svg>
+        {/* Label */}
+        <div className="absolute inset-0 flex items-center justify-center gap-2" dir="rtl">
+          <span className={`font-bold ${isMobile ? 'text-[10px]' : 'text-xs'} ${
+            isMyTurn ? 'text-yellow-300' : 'text-gray-300'
+          }`}>
+            {isMyTurn ? 'תורך!' : `תור ${turnPlayer.name}`}
+          </span>
+          <span className={`font-mono font-bold ${isMobile ? 'text-[10px]' : 'text-xs'} ${
+            isLowTime ? 'text-red-400 animate-pulse' : 'text-white'
+          }`}>
+            {Math.ceil(remaining)}s
+          </span>
+        </div>
+      </div>
     );
   };
 
@@ -350,7 +368,6 @@ export const GameTable: React.FC<GameTableProps> = ({
               )}
             </div>
           </div>
-          {isCurrentTurn && !isMobile && renderTurnTimer()}
         </div>
       </div>
     );
@@ -417,11 +434,11 @@ export const GameTable: React.FC<GameTableProps> = ({
                 onClick={() => setPanelCollapsed(false)}
                 className="flex-1 py-2.5 bg-yellow-500 hover:bg-yellow-400 text-black font-bold rounded-xl text-sm active:scale-95"
               >
-                ▲ הציע {gameState.currentBidAmount > 0 ? `(נוכחי: ${gameState.currentBidAmount})` : ''}
+                ▲ הצע {gameState.currentBidAmount > 0 ? `(הצעה נוכחית: ${gameState.currentBidAmount})` : ''}
               </button>
               <button onClick={onPassBid}
                 className="px-4 py-2.5 bg-gray-700/80 hover:bg-gray-600 text-white font-bold rounded-xl text-sm active:scale-95">
-                עבור ❌
+                פאס
               </button>
             </div>
           </div>
@@ -431,7 +448,8 @@ export const GameTable: React.FC<GameTableProps> = ({
       // Expanded: full bid grid
       return (
         <div className="fixed bottom-0 left-0 right-0 z-50 animate-slideUpBottom">
-          <div className="bg-[#16213e] rounded-t-2xl shadow-2xl border-t border-[#4a5a7e]/60 overflow-hidden">
+          <div className="bg-[#16213e] rounded-t-2xl shadow-2xl border-t border-[#4a5a7e]/60 overflow-hidden"
+            onTouchStart={handlePanelTouchStart} onTouchEnd={handlePanelTouchEnd}>
 
             {/* Collapse handle */}
             <button
@@ -443,18 +461,18 @@ export const GameTable: React.FC<GameTableProps> = ({
 
             {/* Header: current bid status + minimize button */}
             <div className="px-4 py-1.5 flex items-center justify-between" dir="rtl">
-              <span className="text-white text-sm font-bold">תורך להציע</span>
+              <span className="text-white text-sm font-bold">הצע סכום</span>
               <div className="flex items-center gap-2">
                 {gameState.currentBidAmount > 0 && (
                   <span className="text-yellow-400 text-xs font-bold">
-                    נוכחי: {gameState.currentBidAmount}
+                    הצעה נוכחית: {gameState.currentBidAmount}
                   </span>
                 )}
                 <button
                   onClick={() => setPanelCollapsed(true)}
                   className="px-2 py-1 bg-gray-700/60 rounded-lg text-gray-400 text-xs"
                 >
-                  ▼ הסתר
+                  הסתר
                 </button>
               </div>
             </div>
@@ -486,11 +504,11 @@ export const GameTable: React.FC<GameTableProps> = ({
             <div className="px-3 pb-4 pt-1 flex gap-2">
               <button onClick={onPassBid}
                 className="flex-1 py-3 bg-gray-700/80 hover:bg-gray-600 text-white font-bold rounded-xl transition-colors text-base active:scale-95">
-                עבור ❌
+                פאס
               </button>
               <button onClick={() => onPlaceBid(230)}
                 className="flex-1 py-3 bg-red-600 hover:bg-red-500 text-white font-bold rounded-xl transition-colors text-base active:scale-95">
-                קאפו! 💥
+                קאפו
               </button>
             </div>
           </div>
@@ -506,10 +524,10 @@ export const GameTable: React.FC<GameTableProps> = ({
 
           {/* Header: current bid status */}
           <div className="px-4 py-2.5 bg-black/30 border-b border-[#4a5a7e]/40 flex items-center justify-between" dir="rtl">
-            <span className="text-gray-400 text-xs font-medium">תורך להציע</span>
+            <span className="text-gray-400 text-xs font-medium">הצע סכום</span>
             {gameState.currentBidAmount > 0 ? (
               <span className="text-yellow-400 text-sm font-bold">
-                נוכחי: {gameState.currentBidAmount} ({gameState.players[gameState.currentBidWinner!]?.name})
+                הצעה נוכחית: {gameState.currentBidAmount} ע״י {gameState.players[gameState.currentBidWinner!]?.name}
               </span>
             ) : (
               <span className="text-gray-500 text-xs">אין הצעות עדיין</span>
@@ -543,11 +561,11 @@ export const GameTable: React.FC<GameTableProps> = ({
           <div className="px-3 pb-3 flex gap-2">
             <button onClick={onPassBid}
               className="flex-1 py-2.5 bg-gray-700/80 hover:bg-gray-600 text-white font-bold rounded-lg transition-colors text-sm active:scale-95">
-              עבור ❌
+              פאס
             </button>
             <button onClick={() => onPlaceBid(230)}
               className="flex-1 py-2.5 bg-red-600 hover:bg-red-500 text-white font-bold rounded-lg transition-colors text-sm active:scale-95">
-              קאפו! 💥
+              קאפו
             </button>
           </div>
         </div>
@@ -579,7 +597,8 @@ export const GameTable: React.FC<GameTableProps> = ({
       // Expanded: full suit grid as bottom sheet
       return (
         <div className="fixed bottom-0 left-0 right-0 z-50 animate-slideUpBottom">
-          <div className="bg-[#16213e] rounded-t-2xl shadow-2xl border-t border-[#4a5a7e]/60 overflow-hidden">
+          <div className="bg-[#16213e] rounded-t-2xl shadow-2xl border-t border-[#4a5a7e]/60 overflow-hidden"
+            onTouchStart={handlePanelTouchStart} onTouchEnd={handlePanelTouchEnd}>
             {/* Collapse handle */}
             <button
               onClick={() => setPanelCollapsed(true)}
@@ -590,12 +609,12 @@ export const GameTable: React.FC<GameTableProps> = ({
 
             {/* Header */}
             <div className="px-4 py-1.5 flex items-center justify-between" dir="rtl">
-              <span className="text-white text-sm font-bold">בחר אטו (חליפה שולטת)</span>
+              <span className="text-white text-sm font-bold">בחר אטו</span>
               <button
                 onClick={() => setPanelCollapsed(true)}
                 className="px-2 py-1 bg-gray-700/60 rounded-lg text-gray-400 text-xs"
               >
-                ▼ הסתר
+                הסתר
               </button>
             </div>
 
@@ -630,7 +649,7 @@ export const GameTable: React.FC<GameTableProps> = ({
         <div className="absolute left-1/2 -translate-x-1/2 z-30 animate-slideUpBottom"
           style={{ bottom: '220px', width: '340px' }}>
           <div className="bg-[#16213e] rounded-2xl p-4 shadow-2xl border border-[#2a3a5e]">
-            <p className="text-center text-yellow-400 font-bold mb-4 text-base">בחר אטו (חליפה שולטת)</p>
+            <p className="text-center text-yellow-400 font-bold mb-4 text-base">בחר אטו</p>
             <div className="grid grid-cols-2 gap-3">
               {Object.values(Suit).map(suit => (
                 <button
@@ -659,7 +678,7 @@ export const GameTable: React.FC<GameTableProps> = ({
 
     const singingContent = (
       <>
-        <p className="text-center text-yellow-400 font-bold mb-4 text-lg">שירה</p>
+        <p className="text-center text-yellow-400 font-bold mb-4 text-lg">הכרזת שירה</p>
         {validActions.singableCantes.length > 0 && (
           <div className="space-y-2.5 mb-4">
             {validActions.singableCantes.map(suit => (
@@ -673,13 +692,13 @@ export const GameTable: React.FC<GameTableProps> = ({
                   color: SUIT_COLORS[suit],
                 }}
               >
-                שר {SUIT_SYMBOLS[suit]} {SUIT_NAMES_HE[suit]} ({suit === gameState.trumpSuit ? '40' : '20'} נק׳)
+                {SUIT_NAMES_HE[suit]} ({suit === gameState.trumpSuit ? '40' : '20'} נק׳)
               </button>
             ))}
           </div>
         )}
         {validActions.singableCantes.length === 0 && (
-          <p className="text-center text-gray-400 text-sm mb-4">אין שירה אפשרית</p>
+          <p className="text-center text-gray-400 text-sm mb-4">לא ניתן לשיר</p>
         )}
         <button onClick={onDoneSinging}
           className="w-full py-3.5 bg-gray-700 hover:bg-gray-600 text-white font-bold rounded-xl transition-colors text-base active:scale-95">
@@ -699,7 +718,7 @@ export const GameTable: React.FC<GameTableProps> = ({
                 onClick={() => setPanelCollapsed(false)}
                 className="w-full py-2.5 bg-yellow-500 hover:bg-yellow-400 text-black font-bold rounded-xl text-sm active:scale-95"
               >
-                ▲ שירה
+                ▲ הכרזת שירה
               </button>
             </div>
           </div>
@@ -709,7 +728,8 @@ export const GameTable: React.FC<GameTableProps> = ({
       // Expanded: singing options as bottom sheet
       return (
         <div className="fixed bottom-0 left-0 right-0 z-50 animate-slideUpBottom">
-          <div className="bg-[#16213e] rounded-t-2xl shadow-2xl border-t border-[#4a5a7e]/60 overflow-hidden">
+          <div className="bg-[#16213e] rounded-t-2xl shadow-2xl border-t border-[#4a5a7e]/60 overflow-hidden"
+            onTouchStart={handlePanelTouchStart} onTouchEnd={handlePanelTouchEnd}>
             {/* Collapse handle */}
             <button
               onClick={() => setPanelCollapsed(true)}
@@ -720,12 +740,12 @@ export const GameTable: React.FC<GameTableProps> = ({
 
             {/* Header */}
             <div className="px-4 py-1.5 flex items-center justify-between" dir="rtl">
-              <span className="text-white text-sm font-bold">שירה</span>
+              <span className="text-white text-sm font-bold">הכרזת שירה</span>
               <button
                 onClick={() => setPanelCollapsed(true)}
                 className="px-2 py-1 bg-gray-700/60 rounded-lg text-gray-400 text-xs"
               >
-                ▼ הסתר
+                הסתר
               </button>
             </div>
 
@@ -1103,6 +1123,9 @@ export const GameTable: React.FC<GameTableProps> = ({
       `}</style>
 
       {/* Landscape mode is now supported — no blocker */}
+
+      {/* Turn timer bar — always visible at very top */}
+      {renderTurnTimerBar()}
 
       {/* Table felt */}
       <div className={`absolute rounded-[2rem] bg-gradient-to-br from-[#1a5c2a] to-[#0f3d1a] shadow-inner ${
@@ -1510,7 +1533,6 @@ export const GameTable: React.FC<GameTableProps> = ({
               style={!isMyTurn ? { borderColor: myTeamColor } : undefined}>
               {gameState.players[gameState.mySeat]!.avatar && <span className="mr-1">{gameState.players[gameState.mySeat]!.avatar}</span>}
               {gameState.players[gameState.mySeat]!.name}
-              {isMyTurn && renderTurnTimer()}
               {isMyTurn && (gameState.phase === GamePhase.TRICK_PLAY || gameState.phase === GamePhase.BIDDING) && (
                 <span className="inline-block w-2 h-2 bg-yellow-400 rounded-full ml-2 animate-pulse"></span>
               )}

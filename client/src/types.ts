@@ -8,9 +8,9 @@ export enum Suit {
 
 export const SUIT_NAMES_HE: Record<Suit, string> = {
   [Suit.OROS]: 'זהב',
-  [Suit.COPAS]: 'כוסות',
-  [Suit.ESPADAS]: 'חרבות',
-  [Suit.BASTOS]: 'מקלות',
+  [Suit.COPAS]: 'קופז',
+  [Suit.ESPADAS]: 'ספדה',
+  [Suit.BASTOS]: 'שחור',
 };
 
 export const SUIT_SYMBOLS: Record<Suit, string> = {
