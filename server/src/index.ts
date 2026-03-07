@@ -12,6 +12,7 @@ import {
 } from './engine/game.js';
 import { GamePhase, SEAT_ORDER, SeatPosition, Suit } from './engine/types.js';
 import { supabase, isSupabaseConfigured } from './lib/supabase.js';
+import { recordGameResults } from './lib/gameRecorder.js';
 
 const app = express();
 app.use(cors());
@@ -198,7 +199,7 @@ io.on('connection', (socket) => {
       }
     }
 
-    const result = joinRoom(roomCode, socket.id, playerName);
+    const result = joinRoom(roomCode, socket.id, playerName, '', undefined, socket.data.userId || undefined);
     if ('error' in result) {
       console.log(`[rejoinRoom] failed: ${result.error}`);
       socket.emit('roomError', result.error);
@@ -215,7 +216,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('createRoom', (playerName: string, targetScore?: number, avatar?: string, password?: string) => {
-    const result = createRoom(socket.id, playerName, avatar || '', password);
+    const result = createRoom(socket.id, playerName, avatar || '', password, socket.data.userId || undefined);
     if (!result) {
       socket.emit('roomError', 'שגיאה ביצירת חדר');
       return;
@@ -235,7 +236,7 @@ io.on('connection', (socket) => {
   });
   
   socket.on('joinRoom', ({ roomCode, playerName, avatar, password }: { roomCode: string; playerName: string; avatar?: string; password?: string }) => {
-    const result = joinRoom(roomCode, socket.id, playerName, avatar || '', password);
+    const result = joinRoom(roomCode, socket.id, playerName, avatar || '', password, socket.data.userId || undefined);
     if ('error' in result) {
       socket.emit('roomError', result.error);
       return;
@@ -338,6 +339,15 @@ io.on('connection', (socket) => {
     if (room.state.phase !== GamePhase.ROUND_SCORING && room.state.phase !== GamePhase.GAME_OVER) {
       console.log(`[nextRound] REJECTED: phase is ${room.state.phase}`);
       return;
+    }
+
+    // Record game results before transitioning away from GAME_OVER
+    // Deep-copy the state snapshot so async recording isn't affected by nextRound mutation
+    if (room.state.phase === GamePhase.GAME_OVER) {
+      const stateSnapshot = JSON.parse(JSON.stringify(room.state));
+      recordGameResults(stateSnapshot, room.code).catch(err => {
+        console.error('[nextRound] Failed to record game results:', err);
+      });
     }
 
     nextRound(room.state);

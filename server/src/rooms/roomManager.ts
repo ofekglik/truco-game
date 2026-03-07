@@ -3,8 +3,9 @@ import { GameState, SeatPosition, SEAT_ORDER, Player, GamePhase } from '../engin
 import { createInitialState } from '../engine/game.js';
 
 export interface RoomSummary {
-  code: string;
+  code: string;           // internal ID, used by client to join but NOT displayed
   creatorName: string;
+  creatorAvatar: string;
   playerCount: number;
   maxPlayers: number;
   targetScore: number;
@@ -33,7 +34,7 @@ function generateRoomCode(): string {
   return code;
 }
 
-export function createRoom(socketId: string, playerName: string, avatar: string = '', password?: string): { room: Room; seat: SeatPosition } | null {
+export function createRoom(socketId: string, playerName: string, avatar: string = '', password?: string, supabaseUserId?: string): { room: Room; seat: SeatPosition } | null {
   let code = generateRoomCode();
   while (rooms.has(code)) code = generateRoomCode();
 
@@ -47,6 +48,7 @@ export function createRoom(socketId: string, playerName: string, avatar: string 
     hand: [],
     connected: true,
     avatar,
+    supabaseUserId: supabaseUserId || undefined,
   };
 
   const room: Room = {
@@ -65,17 +67,39 @@ export function createRoom(socketId: string, playerName: string, avatar: string 
   return { room, seat };
 }
 
-export function joinRoom(roomCode: string, socketId: string, playerName: string, avatar: string = '', password?: string): { room: Room; seat: SeatPosition } | { error: string } {
+export function joinRoom(roomCode: string, socketId: string, playerName: string, avatar: string = '', password?: string, supabaseUserId?: string): { room: Room; seat: SeatPosition } | { error: string } {
   const room = rooms.get(roomCode.toUpperCase());
   if (!room) return { error: 'חדר לא נמצא' };
 
-  // Check if reconnecting — match by name (case-insensitive, trimmed)
+  // Check if reconnecting — first try by supabaseUserId (most reliable), then by name
   // Works in ALL phases (WAITING, active game, etc.)
+
+  // Try matching by Supabase userId first (for authenticated users)
+  if (supabaseUserId) {
+    for (const seat of SEAT_ORDER) {
+      const player = room.state.players[seat];
+      if (player && player.supabaseUserId === supabaseUserId) {
+        const oldSid = room.seatToSocket.get(seat);
+        if (oldSid) {
+          room.socketToSeat.delete(oldSid);
+          socketToRoom.delete(oldSid);
+        }
+        room.seatToSocket.set(seat, socketId);
+        room.socketToSeat.set(socketId, seat);
+        socketToRoom.set(socketId, room.code);
+        player.id = socketId;
+        player.connected = true;
+        console.log(`[roomManager] Reconnected by userId ${supabaseUserId} to seat ${seat} in phase ${room.state.phase}`);
+        return { room, seat };
+      }
+    }
+  }
+
+  // Fall back to name matching (for guests or if userId didn't match)
   const normalizedName = playerName.trim().toLowerCase();
   for (const seat of SEAT_ORDER) {
     const player = room.state.players[seat];
     if (player && player.name.trim().toLowerCase() === normalizedName) {
-      // Reconnect — allow even if still marked connected (socket might have changed)
       const oldSid = room.seatToSocket.get(seat);
       if (oldSid) {
         room.socketToSeat.delete(oldSid);
@@ -86,6 +110,8 @@ export function joinRoom(roomCode: string, socketId: string, playerName: string,
       socketToRoom.set(socketId, room.code);
       player.id = socketId;
       player.connected = true;
+      // Update supabaseUserId if the player now has one (e.g. was guest before)
+      if (supabaseUserId) player.supabaseUserId = supabaseUserId;
       console.log(`[roomManager] Reconnected ${playerName} to seat ${seat} in phase ${room.state.phase} (socket ${socketId})`);
       return { room, seat };
     }
@@ -94,6 +120,14 @@ export function joinRoom(roomCode: string, socketId: string, playerName: string,
   // Not a reconnection — if game already started, reject new joins
   if (room.state.phase !== GamePhase.WAITING) {
     return { error: 'המשחק כבר התחיל' };
+  }
+
+  // Prevent duplicate names in same room
+  for (const seat of SEAT_ORDER) {
+    const player = room.state.players[seat];
+    if (player && player.name.trim().toLowerCase() === normalizedName) {
+      return { error: 'שם זה כבר תפוס בחדר' };
+    }
   }
 
   // Validate password if room has one
@@ -122,6 +156,7 @@ export function joinRoom(roomCode: string, socketId: string, playerName: string,
     hand: [],
     connected: true,
     avatar,
+    supabaseUserId: supabaseUserId || undefined,
   };
 
   room.socketToSeat.set(socketId, emptySeat);
@@ -139,9 +174,20 @@ export function listRooms(): RoomSummary[] {
     const playerCount = SEAT_ORDER.filter(s => room.state.players[s] !== null).length;
     if (playerCount >= 4) continue; // Don't show full rooms
 
+    // Find creator's avatar from players
+    let creatorAvatar = '';
+    for (const seat of SEAT_ORDER) {
+      const player = room.state.players[seat];
+      if (player && player.name === room.creatorName) {
+        creatorAvatar = player.avatar;
+        break;
+      }
+    }
+
     summaries.push({
       code,
       creatorName: room.creatorName,
+      creatorAvatar,
       playerCount,
       maxPlayers: 4,
       targetScore: room.state.targetScore,

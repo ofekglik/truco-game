@@ -28,6 +28,25 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+const GUEST_STORAGE_KEY = 'ato_guest_profile';
+
+function saveGuestProfile(guestProfile: UserProfile | null) {
+  if (guestProfile) {
+    sessionStorage.setItem(GUEST_STORAGE_KEY, JSON.stringify(guestProfile));
+  } else {
+    sessionStorage.removeItem(GUEST_STORAGE_KEY);
+  }
+}
+
+function loadGuestProfile(): UserProfile | null {
+  try {
+    const stored = sessionStorage.getItem(GUEST_STORAGE_KEY);
+    return stored ? JSON.parse(stored) : null;
+  } catch {
+    return null;
+  }
+}
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<any | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -56,10 +75,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  // Single auth listener - handles both initial session and state changes
-  // Using only onAuthStateChange avoids the lock race condition between
-  // getSession() and onAuthStateChange that causes "AbortError: Lock broken"
+  // Init: try loading guest profile from sessionStorage before Supabase auth
   useEffect(() => {
+    const savedGuest = loadGuestProfile();
+    if (savedGuest) {
+      setProfile(savedGuest);
+      setIsGuest(true);
+      setNeedsNickname(false);
+      setLoading(false);
+      return; // Don't start Supabase auth listener for guests
+    }
+
     if (!isSupabaseEnabled) {
       setLoading(false);
       return;
@@ -73,10 +99,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       try {
         if (session?.user) {
-          // Resolve profile BEFORE updating any state to avoid
-          // intermediate renders where user is set but profile status is unknown
           const profileData = await fetchProfile(session.user.id);
-          // Batch all state updates together
           setUser(session.user);
           if (profileData) {
             setProfile(profileData);
@@ -107,6 +130,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signInWithGoogle = useCallback(async () => {
     if (!isSupabaseEnabled) throw new Error('Supabase not configured');
 
+    // Clear guest profile if switching to Google
+    saveGuestProfile(null);
+    setIsGuest(false);
+
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
@@ -118,6 +145,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [isSupabaseEnabled]);
 
   const signOut = useCallback(async () => {
+    if (isGuest) {
+      // Guest sign out: clear sessionStorage and reset state
+      saveGuestProfile(null);
+      setProfile(null);
+      setIsGuest(false);
+      setNeedsNickname(false);
+      return;
+    }
+
     if (!isSupabaseEnabled) throw new Error('Supabase not configured');
 
     const { error } = await supabase.auth.signOut();
@@ -126,7 +162,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUser(null);
     setProfile(null);
     setNeedsNickname(false);
-  }, [isSupabaseEnabled]);
+  }, [isSupabaseEnabled, isGuest]);
 
   const updateNickname = useCallback(async (nickname: string, avatar: string) => {
     if (!isSupabaseEnabled || !user) throw new Error('Supabase not configured or user not logged in');
@@ -148,7 +184,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setNeedsNickname(false);
     } catch (error: any) {
       if (error.code === '23505') {
-        // Unique constraint violation
         throw new Error('שם זה כבר תפוס');
       }
       throw error;
@@ -159,12 +194,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!nickname.trim()) throw new Error('יש להכניס שם');
     if (nickname.length > 15) throw new Error('השם לא יכול להכיל יותר מ-15 תווים');
 
-    // Create a fake profile for guest mode (not saved to database)
     const guestProfile: UserProfile = {
       id: `guest_${Date.now()}`,
       nickname: nickname.trim(),
       avatar,
-      elo_rating: 1500,
+      elo_rating: 1000,
       xp: 0,
       level: 1,
       created_at: new Date().toISOString(),
@@ -175,6 +209,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setProfile(guestProfile);
     setIsGuest(true);
     setNeedsNickname(false);
+    saveGuestProfile(guestProfile);
   }, []);
 
   return (

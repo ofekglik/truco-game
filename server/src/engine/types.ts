@@ -51,6 +51,7 @@ export interface Player {
   hand: Card[];
   connected: boolean;
   avatar: string;
+  supabaseUserId?: string; // authenticated user's Supabase UUID (undefined for guests)
 }
 
 export enum GamePhase {

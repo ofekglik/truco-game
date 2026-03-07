@@ -19,22 +19,11 @@ function AppContent() {
     swapSeat, updateSettings, leaveRoom,
   } = useSocket();
 
-  // Extract room code from URL params for share links
-  const [urlRoomCode, setUrlRoomCode] = useState<string | null>(null);
   const [showProfile, setShowProfile] = useState(false);
 
   // Safety fallback: if user exists but profile never resolves after 3s,
   // force the nickname screen so the user isn't stuck forever
   const [profileTimeout, setProfileTimeout] = useState(false);
-
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const room = params.get('room');
-    if (room) {
-      setUrlRoomCode(room.toUpperCase());
-      window.history.replaceState({}, '', window.location.pathname);
-    }
-  }, []);
 
   useEffect(() => {
     if (user && !profile && !needsNickname && !loading) {
@@ -56,7 +45,7 @@ function AppContent() {
     );
   }
 
-  // No user and no profile - show guest entry screen (login screen repurposed)
+  // No user and no profile - show guest entry screen
   if (!user && !profile) {
     return <LoginScreen />;
   }
@@ -67,7 +56,6 @@ function AppContent() {
   }
 
   // User exists but profile isn't resolved yet (fetchProfile still in-flight)
-  // Show a brief loading screen; after 3s fallback to NicknameScreen
   if (user && !profile) {
     if (profileTimeout) {
       return <NicknameScreen />;
@@ -87,7 +75,7 @@ function AppContent() {
     return <ProfilePage onBack={() => setShowProfile(false)} />;
   }
 
-  // Not in a room yet
+  // Not in a room yet — show lobby
   if (!roomInfo) {
     return (
       <Lobby
@@ -95,7 +83,6 @@ function AppContent() {
         onJoinRoom={joinRoom}
         error={error}
         connected={connected}
-        prefillRoomCode={urlRoomCode || undefined}
         onShowProfile={() => setShowProfile(true)}
         roomsList={roomsList}
         onFetchRooms={fetchRoomsList}

@@ -152,8 +152,9 @@ export interface ClientGameState {
 }
 
 export interface RoomSummary {
-  code: string;
+  code: string;           // internal ID for joining, never displayed
   creatorName: string;
+  creatorAvatar: string;
   playerCount: number;
   maxPlayers: number;
   targetScore: number;
