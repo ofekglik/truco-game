@@ -1237,7 +1237,7 @@ export const GameTable: React.FC<GameTableProps> = ({
             : 'bg-gradient-to-r from-blue-900/80 to-red-900/80 backdrop-blur-sm rounded-full px-4 py-2 text-sm font-bold border border-gray-600 hover:border-yellow-400 hover:shadow-lg hover:shadow-yellow-400/50 flex items-center gap-2 transition-all'
         }`}
       >
-        {/* Trump info — left side of pill */}
+        {/* Trump info + buyer — left side of pill */}
         {gameState.trumpSuit && (
           <>
             <span className={isMobile ? 'text-xs' : 'text-base'} style={{ color: SUIT_COLORS[gameState.trumpSuit] }}>
@@ -1246,6 +1246,11 @@ export const GameTable: React.FC<GameTableProps> = ({
             <span className={`font-bold ${isMobile ? 'text-[9px]' : 'text-xs'}`} style={{ color: SUIT_COLORS[gameState.trumpSuit] }}>
               {gameState.currentBidAmount}
             </span>
+            {gameState.currentBidWinner && gameState.players[gameState.currentBidWinner] && (
+              <span className={`text-gray-300 ${isMobile ? 'text-[8px]' : 'text-[10px]'}`}>
+                {gameState.players[gameState.currentBidWinner]!.name}
+              </span>
+            )}
             <span className="text-gray-600">|</span>
           </>
         )}
