@@ -347,7 +347,7 @@ export const GameTable: React.FC<GameTableProps> = ({
             <div className="flex flex-col">
               <div className={`font-bold text-white leading-tight ${isMobile ? 'text-[10px] max-w-[60px] truncate' : 'text-sm'}`}>
                 {player.name}
-                {!player.connected && <span className={`text-red-400 ml-1 ${isMobile ? 'text-[8px]' : 'text-xs'}`}>(מנותק)</span>}
+                {!player.connected && <span className={`text-red-400 ml-1 ${isMobile ? 'text-[8px]' : 'text-xs'}`}>• לא מחובר</span>}
               </div>
               {/* Card count — dots on desktop, number on mobile */}
               {isMobile ? (
@@ -788,10 +788,10 @@ export const GameTable: React.FC<GameTableProps> = ({
             <div className="text-4xl mb-2 animate-countPulse">{biddingFell ? '💥' : '🎉'}</div>
             <h3 className="text-xl font-bold text-yellow-400">סיום סיבוב {gameState.roundNumber}</h3>
             {biddingFell && (
-              <p className="text-red-400 text-sm font-bold mt-1 animate-fadeIn">הקבוצה המציעה נפלה!</p>
+              <p className="text-red-400 text-sm font-bold mt-1 animate-fadeIn">הקבוצה הקונה הפסידה</p>
             )}
             {!biddingFell && lastRound.bidAmount && (
-              <p className="text-green-400 text-sm mt-1 animate-fadeIn">הצעה של {lastRound.bidAmount} הצליחה!</p>
+              <p className="text-green-400 text-sm mt-1 animate-fadeIn">הקבוצה הקונה ניצחה ({lastRound.bidAmount})</p>
             )}
           </div>
 
@@ -802,7 +802,7 @@ export const GameTable: React.FC<GameTableProps> = ({
                 ? 'bg-blue-800/40 border-blue-400 shadow-lg shadow-blue-500/20'
                 : 'bg-blue-900/20 border-blue-800/50'
             }`}>
-              <p className="text-blue-400 text-xs font-medium mb-1">קבוצה A</p>
+              <p className="text-blue-400 text-xs font-medium mb-1">כחולה</p>
               <p className="text-2xl font-bold text-white animate-countPulse">{lastRound.team1Total}</p>
               <p className="text-[10px] text-gray-400 mt-1">לקיחות {lastRound.team1TrickPoints} • שירה {lastRound.team1SingingPoints}</p>
             </div>
@@ -811,7 +811,7 @@ export const GameTable: React.FC<GameTableProps> = ({
                 ? 'bg-red-800/40 border-red-400 shadow-lg shadow-red-500/20'
                 : 'bg-red-900/20 border-red-800/50'
             }`}>
-              <p className="text-red-400 text-xs font-medium mb-1">קבוצה B</p>
+              <p className="text-red-400 text-xs font-medium mb-1">אדום</p>
               <p className="text-2xl font-bold text-white animate-countPulse">{lastRound.team2Total}</p>
               <p className="text-[10px] text-gray-400 mt-1">לקיחות {lastRound.team2TrickPoints} • שירה {lastRound.team2SingingPoints}</p>
             </div>
@@ -821,12 +821,12 @@ export const GameTable: React.FC<GameTableProps> = ({
           <div className="bg-black/30 rounded-xl p-3 mb-4">
             <div className="flex justify-between items-center mb-2">
               <div className="text-center flex-1">
-                <p className="text-blue-400 text-[10px]">קבוצה A</p>
+                <p className="text-blue-400 text-[10px]">כחולה</p>
                 <p className="text-lg font-bold text-white">{gameState.scores.team1}</p>
               </div>
               <div className="text-gray-500 text-xs px-2">ניקוד מצטבר</div>
               <div className="text-center flex-1">
-                <p className="text-red-400 text-[10px]">קבוצה B</p>
+                <p className="text-red-400 text-[10px]">אדום</p>
                 <p className="text-lg font-bold text-white">{gameState.scores.team2}</p>
               </div>
             </div>
@@ -859,7 +859,7 @@ export const GameTable: React.FC<GameTableProps> = ({
   const renderGameOver = () => {
     if (gameState.phase !== GamePhase.GAME_OVER) return null;
     const team1Wins = gameState.scores.team1 >= gameState.targetScore;
-    const winnerTeam = team1Wins ? 'קבוצה A' : 'קבוצה B';
+    const winnerTeam = team1Wins ? 'כחולה' : 'אדום';
     const winnerColor = team1Wins ? 'text-blue-400' : 'text-red-400';
     const winnerGlow = team1Wins ? 'shadow-blue-500/40' : 'shadow-red-500/40';
 
@@ -902,7 +902,7 @@ export const GameTable: React.FC<GameTableProps> = ({
                   ? 'bg-blue-800/40 border-blue-400 shadow-lg shadow-blue-500/30 animate-shimmerBorder'
                   : 'bg-blue-900/20 border-blue-800/50'
               }`}>
-                <p className="text-blue-400 text-xs font-medium mb-1">קבוצה A</p>
+                <p className="text-blue-400 text-xs font-medium mb-1">כחולה</p>
                 <p className="text-3xl font-bold text-white animate-countPulse">{gameState.scores.team1}</p>
               </div>
               <div className={`rounded-xl p-4 text-center border transition-all ${
@@ -910,7 +910,7 @@ export const GameTable: React.FC<GameTableProps> = ({
                   ? 'bg-red-800/40 border-red-400 shadow-lg shadow-red-500/30 animate-shimmerBorder'
                   : 'bg-red-900/20 border-red-800/50'
               }`}>
-                <p className="text-red-400 text-xs font-medium mb-1">קבוצה B</p>
+                <p className="text-red-400 text-xs font-medium mb-1">אדום</p>
                 <p className="text-3xl font-bold text-white animate-countPulse" style={{ animationDelay: '0.2s' }}>{gameState.scores.team2}</p>
               </div>
             </div>
@@ -920,7 +920,7 @@ export const GameTable: React.FC<GameTableProps> = ({
             {/* Round history summary */}
             {gameState.roundHistory.length > 0 && (
               <div className="bg-black/30 rounded-xl p-3 mb-4 max-h-32 overflow-y-auto">
-                <p className="text-gray-400 text-xs font-medium mb-2">סיכום סיבובים:</p>
+                <p className="text-gray-400 text-xs font-medium mb-2">תוצאות סיבובים:</p>
                 {gameState.roundHistory.map((r, i) => (
                   <div key={i} className={`flex justify-between text-xs py-1 px-2 rounded ${
                     i % 2 === 0 ? 'bg-white/5' : ''
@@ -1206,7 +1206,7 @@ export const GameTable: React.FC<GameTableProps> = ({
                 onClick={() => setShowLeaveConfirm(true)}
                 className="w-full py-3 px-4 bg-red-600 hover:bg-red-500 text-white font-bold rounded-lg transition-colors text-right"
               >
-                🚪 עזוב משחק
+                עזוב משחק
               </button>
             </div>
           </div>
@@ -1217,19 +1217,19 @@ export const GameTable: React.FC<GameTableProps> = ({
       {showLeaveConfirm && (
         <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center backdrop-blur-sm">
           <div className="bg-[#16213e] border border-[#4a5a7e] rounded-2xl p-6 w-full max-w-sm shadow-2xl">
-            <h3 className="text-xl font-bold text-yellow-400 mb-4 text-center">בטוח שאתה רוצה לעזוב את המשחק?</h3>
+            <h3 className="text-xl font-bold text-yellow-400 mb-4 text-center">בטוח?</h3>
             <div className="flex gap-3">
               <button
                 onClick={handleLeaveRoom}
                 className="flex-1 py-3 bg-red-600 hover:bg-red-500 text-white font-bold rounded-lg transition-colors"
               >
-                כן, עזוב
+                כן
               </button>
               <button
                 onClick={() => setShowLeaveConfirm(false)}
                 className="flex-1 py-3 bg-gray-600 hover:bg-gray-500 text-white font-bold rounded-lg transition-colors"
               >
-                ביטול
+                לא
               </button>
             </div>
           </div>
