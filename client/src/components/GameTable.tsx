@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   ClientGameState, GamePhase, SeatPosition, Suit, SUIT_NAMES_HE, SUIT_SYMBOLS,
-  SUIT_COLORS, SEAT_NAMES_HE, SEAT_TEAM, Card as CardType, CARD_POWER, TrickCard
+  SUIT_COLORS, SEAT_NAMES_HE, SEAT_TEAM, Card as CardType, CARD_POWER
 } from '../types';
 import { CardComponent, CardBack } from './Card';
 import { Scoreboard } from './Scoreboard';
@@ -80,7 +80,7 @@ export const GameTable: React.FC<GameTableProps> = ({
   const [draggingCardId, setDraggingCardId] = useState<string | null>(null);
   const [panelCollapsed, setPanelCollapsed] = useState(false);
   const [mobileBidValue, setMobileBidValue] = useState(70);
-  const [completedTrickDisplay, setCompletedTrickDisplay] = useState<TrickCard[] | null>(null);
+  // completedTrickDisplay removed — server now handles the 2.5s trick display delay
   const handScrollRef = useRef<HTMLDivElement>(null);
   const panelSwipeRef = useRef<{ startY: number } | null>(null);
 
