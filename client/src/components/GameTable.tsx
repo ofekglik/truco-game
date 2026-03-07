@@ -196,9 +196,13 @@ export const GameTable: React.FC<GameTableProps> = ({
     }
   }, [isMyTurn, selectedCardId, selectedCard]);
 
-  const sortedHand = handOrder
+  const sortedHandFromOrder = handOrder
     .map(id => gameState.myHand.find(c => c.id === id))
     .filter((c): c is CardType => c !== undefined);
+  // Fallback: if handOrder is stale (e.g. after capo round), show all cards from myHand
+  const sortedHand = sortedHandFromOrder.length === gameState.myHand.length
+    ? sortedHandFromOrder
+    : gameState.myHand;
 
   const handleDragStart = useCallback((cardId: string, e: React.MouseEvent | React.TouchEvent) => {
     const isTouchEvent = 'touches' in e;
