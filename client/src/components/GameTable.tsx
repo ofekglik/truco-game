@@ -1184,9 +1184,9 @@ export const GameTable: React.FC<GameTableProps> = ({
             ))}
           </button>
 
-          {/* Mobile: Trump + bid info — centered on board, slight opacity */}
+          {/* Mobile: Trump + bid info — centered on board, above trick cards */}
           {gameState.trumpSuit && (
-            <div className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none">
+            <div className="absolute inset-0 flex items-center justify-center z-[15] pointer-events-none">
               <div className="flex flex-col items-center gap-0.5 opacity-40">
                 <span className="text-3xl" style={{ color: SUIT_COLORS[gameState.trumpSuit] }}>
                   {SUIT_SYMBOLS[gameState.trumpSuit]}
@@ -1225,9 +1225,9 @@ export const GameTable: React.FC<GameTableProps> = ({
             <span className="text-red-400">{gameState.team2TricksWon}</span>
           </div>
 
-          {/* Desktop: Trump + bid info — centered on board, slight opacity */}
+          {/* Desktop: Trump + bid info — centered on board, above trick cards */}
           {gameState.trumpSuit && (
-            <div className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none">
+            <div className="absolute inset-0 flex items-center justify-center z-[15] pointer-events-none">
               <div className="flex flex-col items-center gap-1 opacity-35">
                 <span className="text-5xl" style={{ color: SUIT_COLORS[gameState.trumpSuit] }}>
                   {SUIT_SYMBOLS[gameState.trumpSuit]}
