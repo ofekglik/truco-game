@@ -18,31 +18,47 @@ const SUIT_PIPS: Record<Suit, string> = {
   [Suit.BASTOS]: '♣',
 };
 
-// Cache which card images exist to avoid re-probing on every render
+// ── Preload all 40 card images at module load time ──
+// This ensures images are in the browser cache before any CardComponent renders,
+// eliminating the flash of the CSS fallback card.
 const imageCache: Record<string, 'loading' | 'ok' | 'fail'> = {};
+const ALL_SUITS = ['oros', 'copas', 'espadas', 'bastos'];
+const ALL_RANKS = [1, 2, 3, 4, 5, 6, 7, 10, 11, 12];
 
 function getCardImagePath(suit: string, rank: number): string {
   return `/cards/${suit}/${rank}.png`;
 }
 
+// Preload runs once when the module is first imported
+ALL_SUITS.forEach(suit => {
+  ALL_RANKS.forEach(rank => {
+    const path = getCardImagePath(suit, rank);
+    imageCache[path] = 'loading';
+    const img = new Image();
+    img.onload = () => { imageCache[path] = 'ok'; };
+    img.onerror = () => { imageCache[path] = 'fail'; };
+    img.src = path;
+  });
+});
+
 export const CardComponent: React.FC<CardProps> = ({ card, playable, selected, onClick, small, large, isBiddingPhase }) => {
   const imgPath = getCardImagePath(card.suit, card.rank);
-  const cached = imageCache[imgPath];
-  const [imgState, setImgState] = useState<'loading' | 'ok' | 'fail'>(cached || 'loading');
+  // Read cache synchronously — if preload finished, we get 'ok' immediately (no flash)
+  const [imgState, setImgState] = useState<'loading' | 'ok' | 'fail'>(imageCache[imgPath] || 'loading');
 
   useEffect(() => {
-    // If already resolved in cache, use it
+    // If already resolved, sync state
+    const cached = imageCache[imgPath];
     if (cached === 'ok' || cached === 'fail') {
       setImgState(cached);
       return;
     }
-    // Probe image existence
+    // Still loading from preload — listen for completion
     const img = new Image();
     img.onload = () => { imageCache[imgPath] = 'ok'; setImgState('ok'); };
     img.onerror = () => { imageCache[imgPath] = 'fail'; setImgState('fail'); };
-    imageCache[imgPath] = 'loading';
     img.src = imgPath;
-  }, [imgPath, cached]);
+  }, [imgPath]);
 
   const containerClasses = `
     relative rounded-lg shadow-lg transition-all duration-200 select-none overflow-hidden
