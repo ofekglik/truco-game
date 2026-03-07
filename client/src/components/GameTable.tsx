@@ -152,7 +152,7 @@ export const GameTable: React.FC<GameTableProps> = ({
       const defaultOrder = [...gameState.myHand].sort((a, b) => {
         const suitDiff = suitOrder.indexOf(a.suit) - suitOrder.indexOf(b.suit);
         if (suitDiff !== 0) return suitDiff;
-        return b.rank - a.rank; // high → low within suit
+        return CARD_POWER[b.rank] - CARD_POWER[a.rank]; // high power → low: 1,3,12,11,10,7,6,5,4,2
       }).map(c => c.id);
       setHandOrder(defaultOrder);
     }
