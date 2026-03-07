@@ -79,6 +79,7 @@ export const GameTable: React.FC<GameTableProps> = ({
   const [showScorePill, setShowScorePill] = useState(false);
   const [draggingCardId, setDraggingCardId] = useState<string | null>(null);
   const [panelCollapsed, setPanelCollapsed] = useState(false);
+  const [mobileBidValue, setMobileBidValue] = useState(70);
   const [completedTrickDisplay, setCompletedTrickDisplay] = useState<TrickCard[] | null>(null);
   const handScrollRef = useRef<HTMLDivElement>(null);
   const panelSwipeRef = useRef<{ startY: number } | null>(null);
@@ -137,11 +138,21 @@ export const GameTable: React.FC<GameTableProps> = ({
     setPanelCollapsed(false);
   }, [gameState.phase]);
 
+  // Keep mobile bid stepper in sync with current minimum bid
+  useEffect(() => {
+    if (gameState.phase === GamePhase.BIDDING) {
+      const min = gameState.currentBidAmount > 0 ? gameState.currentBidAmount + 10 : 70;
+      setMobileBidValue(prev => Math.max(prev, min));
+    }
+  }, [gameState.currentBidAmount, gameState.phase]);
+
   useEffect(() => {
     if (handOrder.length === 0 || gameState.roundNumber > (lastCompletedTricksLength > gameState.completedTricks.length ? gameState.roundNumber : -1)) {
+      const suitOrder = [Suit.ESPADAS, Suit.COPAS, Suit.OROS, Suit.BASTOS];
       const defaultOrder = [...gameState.myHand].sort((a, b) => {
-        if (a.suit !== b.suit) return a.suit.localeCompare(b.suit);
-        return a.rank - b.rank;
+        const suitDiff = suitOrder.indexOf(a.suit) - suitOrder.indexOf(b.suit);
+        if (suitDiff !== 0) return suitDiff;
+        return b.rank - a.rank; // high → low within suit
       }).map(c => c.id);
       setHandOrder(defaultOrder);
     }
@@ -424,92 +435,50 @@ export const GameTable: React.FC<GameTableProps> = ({
     const allBids = Array.from({ length: 16 }, (_, i) => 70 + i * 10);
 
     if (isMobile) {
-      // Mobile: collapsible bottom sheet
-      if (panelCollapsed) {
-        // Collapsed: compact bar with current bid info + expand/pass buttons
-        return (
-          <div className="fixed bottom-0 left-0 right-0 z-50" dir="rtl">
-            <div className="bg-[#16213e]/95 backdrop-blur-md border-t border-yellow-500/40 px-3 py-2 flex items-center gap-2">
-              <button
-                onClick={() => setPanelCollapsed(false)}
-                className="flex-1 py-2.5 bg-yellow-500 hover:bg-yellow-400 text-black font-bold rounded-xl text-sm active:scale-95"
-              >
-                ▲ הצע {gameState.currentBidAmount > 0 ? `(הצעה נוכחית: ${gameState.currentBidAmount})` : ''}
-              </button>
-              <button onClick={onPassBid}
-                className="px-4 py-2.5 bg-gray-700/80 hover:bg-gray-600 text-white font-bold rounded-xl text-sm active:scale-95">
-                פאס
-              </button>
-            </div>
-          </div>
-        );
-      }
+      // Ensure mobileBidValue is at least minBid
+      const bidVal = Math.max(mobileBidValue, minBid);
+      const canDecrease = bidVal - 10 >= minBid;
+      const canIncrease = bidVal + 10 <= 220; // 230 is קאפו only
 
-      // Expanded: full bid grid
+      // Mobile: compact horizontal stepper at center of screen
       return (
-        <div className="fixed bottom-0 left-0 right-0 z-50 animate-slideUpBottom">
-          <div className="bg-[#16213e] rounded-t-2xl shadow-2xl border-t border-[#4a5a7e]/60 overflow-hidden"
-            onTouchStart={handlePanelTouchStart} onTouchEnd={handlePanelTouchEnd}>
-
-            {/* Collapse handle */}
-            <button
-              onClick={() => setPanelCollapsed(true)}
-              className="w-full flex justify-center pt-2 pb-1"
-            >
-              <div className="w-10 h-1 bg-gray-500 rounded-full" />
-            </button>
-
-            {/* Header: current bid status + minimize button */}
-            <div className="px-4 py-1.5 flex items-center justify-between" dir="rtl">
-              <span className="text-white text-sm font-bold">הצע סכום</span>
-              <div className="flex items-center gap-2">
-                {gameState.currentBidAmount > 0 && (
-                  <span className="text-yellow-400 text-xs font-bold">
-                    הצעה נוכחית: {gameState.currentBidAmount}
-                  </span>
-                )}
-                <button
-                  onClick={() => setPanelCollapsed(true)}
-                  className="px-2 py-1 bg-gray-700/60 rounded-lg text-gray-400 text-xs"
-                >
-                  הסתר
-                </button>
+        <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none" dir="rtl">
+          <div className="pointer-events-auto bg-[#16213e]/95 backdrop-blur-md rounded-2xl shadow-2xl border border-yellow-500/40 px-4 py-3">
+            {/* Current bid info */}
+            {gameState.currentBidAmount > 0 && (
+              <div className="text-center mb-2">
+                <span className="text-yellow-400 text-xs font-bold">הצעה נוכחית: {gameState.currentBidAmount}</span>
               </div>
-            </div>
-
-            {/* Bid grid — 4 cols, compact */}
-            <div className="px-3 pb-2">
-              <div className="grid grid-cols-4 gap-1.5">
-                {allBids.map(val => {
-                  const isDisabled = val < minBid;
-                  return (
-                    <button
-                      key={val}
-                      onClick={() => !isDisabled && onPlaceBid(val)}
-                      disabled={isDisabled}
-                      className={`py-2.5 rounded-xl font-bold text-base transition-all ${
-                        isDisabled
-                          ? 'bg-gray-800/40 text-gray-600 cursor-not-allowed'
-                          : 'bg-[#2a3a5e] hover:bg-yellow-500 hover:text-black text-white active:scale-95 active:bg-yellow-500 active:text-black'
-                      }`}
-                    >
-                      {val}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Bottom actions: Pass + Capo */}
-            <div className="px-3 pb-4 pt-1 flex gap-2">
-              <button onClick={onPassBid}
-                className="flex-1 py-3 bg-gray-700/80 hover:bg-gray-600 text-white font-bold rounded-xl transition-colors text-base active:scale-95">
-                פאס
-              </button>
-              <button onClick={() => onPlaceBid(230)}
-                className="flex-1 py-3 bg-red-600 hover:bg-red-500 text-white font-bold rounded-xl transition-colors text-base active:scale-95">
-                קאפו
-              </button>
+            )}
+            {/* Stepper row: [−] value [+] [הצע] [קאפו] [פאס] */}
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => canDecrease && setMobileBidValue(bidVal - 10)}
+                disabled={!canDecrease}
+                className={`w-10 h-10 rounded-xl font-bold text-xl flex items-center justify-center ${
+                  canDecrease ? 'bg-[#2a3a5e] text-white active:scale-95 active:bg-yellow-500' : 'bg-gray-800/40 text-gray-600'
+                }`}
+              >−</button>
+              <span className="text-white font-bold text-2xl w-14 text-center">{bidVal}</span>
+              <button
+                onClick={() => canIncrease && setMobileBidValue(bidVal + 10)}
+                disabled={!canIncrease}
+                className={`w-10 h-10 rounded-xl font-bold text-xl flex items-center justify-center ${
+                  canIncrease ? 'bg-[#2a3a5e] text-white active:scale-95 active:bg-yellow-500' : 'bg-gray-800/40 text-gray-600'
+                }`}
+              >+</button>
+              <button
+                onClick={() => onPlaceBid(bidVal)}
+                className="px-4 h-10 bg-yellow-500 hover:bg-yellow-400 text-black font-bold rounded-xl text-sm active:scale-95"
+              >הצע</button>
+              <button
+                onClick={() => onPlaceBid(230)}
+                className="px-3 h-10 bg-red-600 hover:bg-red-500 text-white font-bold rounded-xl text-sm active:scale-95"
+              >קאפו</button>
+              <button
+                onClick={onPassBid}
+                className="px-3 h-10 bg-gray-700/80 hover:bg-gray-600 text-white font-bold rounded-xl text-sm active:scale-95"
+              >פאס</button>
             </div>
           </div>
         </div>
