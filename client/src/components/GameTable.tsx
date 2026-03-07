@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   ClientGameState, GamePhase, SeatPosition, Suit, SUIT_NAMES_HE, SUIT_SYMBOLS,
-  SUIT_COLORS, SEAT_NAMES_HE, SEAT_TEAM, Card as CardType, CARD_POWER
+  SUIT_COLORS, SEAT_NAMES_HE, SEAT_TEAM, Card as CardType, CARD_POWER, TrickCard
 } from '../types';
 import { CardComponent, CardBack } from './Card';
 import { Scoreboard } from './Scoreboard';
@@ -79,6 +79,7 @@ export const GameTable: React.FC<GameTableProps> = ({
   const [showScorePill, setShowScorePill] = useState(false);
   const [draggingCardId, setDraggingCardId] = useState<string | null>(null);
   const [panelCollapsed, setPanelCollapsed] = useState(false);
+  const [completedTrickDisplay, setCompletedTrickDisplay] = useState<TrickCard[] | null>(null);
   const handScrollRef = useRef<HTMLDivElement>(null);
 
   const dragStateRef = useRef<{
@@ -149,6 +150,10 @@ export const GameTable: React.FC<GameTableProps> = ({
           setTimeout(() => setTrickToast(null), 2500);
         }
       }
+      // Keep showing the completed trick's cards for 2.5s before clearing
+      setCompletedTrickDisplay(lastTrick.cards);
+      setTimeout(() => setCompletedTrickDisplay(null), 2500);
+
       setLastCompletedTricksLength(gameState.completedTricks.length);
     }
   }, [gameState.completedTricks.length, gameState.team1TricksWon, gameState.team2TricksWon, soundEnabled]);
@@ -351,7 +356,12 @@ export const GameTable: React.FC<GameTableProps> = ({
   };
 
   const renderTrickCards = () => {
-    const cards = gameState.currentTrick.cards;
+    // Show current trick cards, or if trick just completed, keep showing them for 2.5s
+    const cards = gameState.currentTrick.cards.length > 0
+      ? gameState.currentTrick.cards
+      : completedTrickDisplay || [];
+    if (cards.length === 0) return null;
+
     // Position each card near the player who played it (directional layout)
     const offset = isMobile ? 45 : 80;
 
