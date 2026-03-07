@@ -362,15 +362,15 @@ export const GameTable: React.FC<GameTableProps> = ({
       : completedTrickDisplay || [];
     if (cards.length === 0) return null;
 
-    // Position each card near the player who played it (directional layout)
-    const offset = isMobile ? 45 : 80;
+    // Tight cluster in center — small directional offsets so all 4 cards are visible
+    const off = isMobile ? 22 : 35;
 
-    // Map each seat's relative position to x,y offsets from center
+    // Each card shifts slightly toward the player who played it
     const positionMap: Record<string, { x: number; y: number }> = {
-      bottom: { x: 0, y: offset },
-      top: { x: 0, y: -offset },
-      left: { x: -offset, y: 0 },
-      right: { x: offset, y: 0 },
+      bottom: { x: 0, y: off },
+      top: { x: 0, y: -off },
+      left: { x: -off, y: 0 },
+      right: { x: off, y: 0 },
     };
 
     return cards.map((tc, i) => {
@@ -379,13 +379,14 @@ export const GameTable: React.FC<GameTableProps> = ({
 
       return (
         <div
-          key={i}
+          key={`${tc.seat}-${tc.card.id}`}
           className="absolute z-10 animate-slideIn"
           style={{
             left: '50%',
             top: '50%',
             transform: `translate(calc(-50% + ${pos.x}px), calc(-50% + ${pos.y}px))`,
             animationDelay: `${i * 100}ms`,
+            zIndex: 10 + i,
           }}
         >
           <CardComponent
@@ -968,15 +969,13 @@ export const GameTable: React.FC<GameTableProps> = ({
         @keyframes slideIn {
           from {
             opacity: 0;
-            transform: scale(0.8);
           }
           to {
             opacity: 1;
-            transform: scale(1);
           }
         }
         .animate-slideIn {
-          animation: slideIn 0.3s ease-out forwards;
+          animation: slideIn 0.25s ease-out forwards;
         }
         @keyframes slideInTop {
           from {
