@@ -333,6 +333,12 @@ export const GameTable: React.FC<GameTableProps> = ({
                   הצעה: {gameState.currentBidAmount}
                 </div>
               )}
+              {/* Lead player badge — shows who starts the trick */}
+              {gameState.phase === GamePhase.TRICK_PLAY && gameState.currentTrick.leadSeat === seat && gameState.currentTrick.cards.length === 0 && (
+                <div className={`${isMobile ? 'text-[9px]' : 'text-xs'} text-green-400 font-bold`}>
+                  ⭐ פותח
+                </div>
+              )}
               {/* Card count — dots on desktop, number on mobile */}
               {gameState.phase !== GamePhase.BIDDING && (isMobile ? (
                 <div className="text-[9px] text-gray-400">{player.cardCount} קלפים</div>
