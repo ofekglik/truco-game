@@ -8,7 +8,7 @@ import {
   createRoom, joinRoom, getRoom, getRoomByCode, removePlayer, isRoomFull, swapSeat, updateRoomSettings, leaveRoom, listRooms, type Room
 } from './rooms/roomManager.js';
 import {
-  startRound, placeBid, declareTrump, singCante, doneSinging, playCard, resolveTrick, nextRound, getClientState
+  startRound, placeBid, declareTrump, singCante, doneSinging, chooseSinger, playCard, resolveTrick, nextRound, getClientState
 } from './engine/game.js';
 import { GamePhase, SEAT_ORDER, SeatPosition, Suit } from './engine/types.js';
 import { supabase, isSupabaseConfigured } from './lib/supabase.js';
@@ -251,11 +251,21 @@ io.on('connection', (socket) => {
     if (!room) return;
     const seat = room.socketToSeat.get(socket.id);
     if (!seat) return;
-    
+
     doneSinging(room.state, seat);
     broadcastState(room);
   });
-  
+
+  socket.on('chooseSinger', (choice: 'self' | 'partner') => {
+    const room = getRoom(socket.id);
+    if (!room) return;
+    const seat = room.socketToSeat.get(socket.id);
+    if (!seat) return;
+
+    chooseSinger(room.state, seat, choice);
+    broadcastState(room);
+  });
+
   socket.on('playCard', (cardId: string) => {
     const room = getRoom(socket.id);
     if (!room) return;

@@ -137,6 +137,10 @@ export function useSocket() {
     socketRef.current?.emit('doneSinging');
   }, []);
 
+  const chooseSinger = useCallback((choice: 'self' | 'partner') => {
+    socketRef.current?.emit('chooseSinger', choice);
+  }, []);
+
   const playCard = useCallback((cardId: string) => {
     socketRef.current?.emit('playCard', cardId);
   }, []);
@@ -179,6 +183,7 @@ export function useSocket() {
     declareTrump,
     singCante,
     doneSinging,
+    chooseSinger,
     playCard,
     nextRound,
     swapSeat,

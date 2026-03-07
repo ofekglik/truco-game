@@ -15,7 +15,7 @@ function AppContent() {
     connected, reconnecting, gameState, roomInfo, error,
     roomsList, fetchRoomsList,
     createRoom, joinRoom, startGame,
-    placeBid, passBid, declareTrump, singCante, doneSinging, playCard, nextRound,
+    placeBid, passBid, declareTrump, singCante, doneSinging, chooseSinger, playCard, nextRound,
     swapSeat, updateSettings, leaveRoom,
   } = useSocket();
 
@@ -117,6 +117,7 @@ function AppContent() {
         onDeclareTrump={declareTrump}
         onSingCante={singCante}
         onDoneSinging={doneSinging}
+        onChooseSinger={chooseSinger}
         onNextRound={nextRound}
         onLeaveRoom={leaveRoom}
         reconnecting={reconnecting}

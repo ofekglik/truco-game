@@ -116,6 +116,7 @@ export interface ValidActions {
   canDeclareTrump: boolean;
   canSing: boolean;
   singableCantes: Suit[];
+  canChooseSinger: boolean;
   playableCards: string[];
   canDeclareCapo: boolean;
 }
@@ -137,6 +138,7 @@ export interface ClientGameState {
   capoDeclarerSeat: SeatPosition | null;
   cantes: Cante[];
   singingDone: boolean;
+  singingChoicePending: boolean;
   currentTrick: Trick;
   completedTricks: Trick[];
   trickNumber: number;

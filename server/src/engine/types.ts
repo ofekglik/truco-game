@@ -131,6 +131,7 @@ export interface GameState {
   cantes: Cante[];
   singingDone: boolean;
   singingAfterTrick: boolean; // flag for when singing happens after a trick win
+  singingChoicePending: boolean; // buyer must choose who sings (self or partner)
 
   // Tricks
   currentTrick: Trick;
@@ -168,6 +169,7 @@ export interface ClientGameState {
   capoDeclarerSeat: SeatPosition | null;
   cantes: Cante[];
   singingDone: boolean;
+  singingChoicePending: boolean;
   currentTrick: Trick;
   completedTricks: Trick[];
   trickNumber: number;
@@ -189,6 +191,7 @@ export interface ValidActions {
   canDeclareTrump: boolean;
   canSing: boolean;
   singableCantes: Suit[];
+  canChooseSinger: boolean; // buyer can choose self or partner to sing
   playableCards: string[]; // card ids
   canDeclareCapo: boolean;
 }
@@ -213,6 +216,7 @@ export interface ClientToServerEvents {
   declareTrump: (suit: Suit) => void;
   singCante: (suit: Suit) => void;
   doneSinging: () => void;
+  chooseSinger: (choice: 'self' | 'partner') => void;
   playCard: (cardId: string) => void;
   nextRound: () => void;
   swapSeat: (targetSeat: SeatPosition) => void;

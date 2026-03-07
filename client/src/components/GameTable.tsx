@@ -14,6 +14,7 @@ interface GameTableProps {
   onDeclareTrump: (suit: Suit) => void;
   onSingCante: (suit: Suit) => void;
   onDoneSinging: () => void;
+  onChooseSinger: (choice: 'self' | 'partner') => void;
   onNextRound: () => void;
   onLeaveRoom: () => void;
   reconnecting: boolean;
@@ -61,7 +62,7 @@ const playWinSound = () => {
 };
 
 export const GameTable: React.FC<GameTableProps> = ({
-  gameState, onPlayCard, onPlaceBid, onPassBid, onDeclareTrump, onSingCante, onDoneSinging, onNextRound,
+  gameState, onPlayCard, onPlaceBid, onPassBid, onDeclareTrump, onSingCante, onDoneSinging, onChooseSinger, onNextRound,
   onLeaveRoom, reconnecting, connected
 }) => {
   const [showMenu, setShowMenu] = useState(false);
@@ -622,6 +623,31 @@ export const GameTable: React.FC<GameTableProps> = ({
     const isBiddingTeam = gameState.biddingTeam && SEAT_TEAM[gameState.mySeat] === gameState.biddingTeam;
     if (gameState.phase !== GamePhase.SINGING || !isBiddingTeam) return null;
 
+    // Singer choice UI — buyer picks who sings
+    const singerChoiceContent = validActions.canChooseSinger ? (
+      <>
+        <p className="text-center text-yellow-400 font-bold mb-4 text-lg">מי שר?</p>
+        <div className="space-y-2.5 mb-4">
+          <button
+            onClick={() => onChooseSinger('self')}
+            className="w-full py-3.5 px-4 rounded-xl font-bold text-base transition-all active:scale-95 border-2 bg-yellow-500/20 border-yellow-400 text-yellow-400"
+          >
+            אני שר
+          </button>
+          <button
+            onClick={() => onChooseSinger('partner')}
+            className="w-full py-3.5 px-4 rounded-xl font-bold text-base transition-all active:scale-95 border-2 bg-blue-500/20 border-blue-400 text-blue-400"
+          >
+            שותף שר
+          </button>
+        </div>
+        <button onClick={onDoneSinging}
+          className="w-full py-3.5 bg-gray-700 hover:bg-gray-600 text-white font-bold rounded-xl transition-colors text-base active:scale-95">
+          דלג על שירה
+        </button>
+      </>
+    ) : null;
+
     const singingContent = (
       <>
         <p className="text-center text-yellow-400 font-bold mb-4 text-lg">הכרזת שירה</p>
@@ -652,6 +678,9 @@ export const GameTable: React.FC<GameTableProps> = ({
         </button>
       </>
     );
+
+    // Use choice content if pending, otherwise regular singing
+    const panelContent = singerChoiceContent || singingContent;
 
     if (isMobile) {
       // Mobile: collapsible bottom sheet
@@ -696,7 +725,7 @@ export const GameTable: React.FC<GameTableProps> = ({
             </div>
 
             <div className="px-4 pb-5">
-              {singingContent}
+              {panelContent}
             </div>
           </div>
         </div>
@@ -711,7 +740,7 @@ export const GameTable: React.FC<GameTableProps> = ({
             <div className="w-12 h-1 bg-gray-500 rounded-full" />
           </div>
           <div className="bg-[#16213e] rounded-t-3xl p-6 shadow-2xl">
-            {singingContent}
+            {panelContent}
           </div>
         </div>
       </>

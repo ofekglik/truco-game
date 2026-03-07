@@ -25,6 +25,7 @@ export function createInitialState(): GameState {
     cantes: [],
     singingDone: false,
     singingAfterTrick: false,
+    singingChoicePending: false,
     currentTrick: { cards: [], leadSeat: 'east' },
     completedTricks: [],
     trickNumber: 0,
@@ -72,6 +73,7 @@ export function startRound(state: GameState): GameState {
   state.cantes = [];
   state.singingDone = false;
   state.singingAfterTrick = false;
+  state.singingChoicePending = false;
   state.currentTrick = { cards: [], leadSeat: firstPlayer };
   state.completedTricks = [];
   state.trickNumber = 0;
@@ -194,6 +196,21 @@ export function declareTrump(state: GameState, seat: SeatPosition, suit: Suit): 
   return state;
 }
 
+function getTeammate(seat: SeatPosition): SeatPosition {
+  const teammates: Record<SeatPosition, SeatPosition> = {
+    south: 'north', north: 'south', east: 'west', west: 'east',
+  };
+  return teammates[seat];
+}
+
+function canSeatSing(state: GameState, seat: SeatPosition): boolean {
+  if (!state.trumpSuit || !state.biddingTeam) return false;
+  const player = state.players[seat];
+  if (!player) return false;
+  const singable = getSingableSuits(player.hand, state.trumpSuit, state.currentBidAmount, state.cantes, seat, state.biddingTeam);
+  return singable.length > 0;
+}
+
 function checkAnySinging(state: GameState): boolean {
   if (!state.trumpSuit || !state.biddingTeam) return false;
   for (const seat of SEAT_ORDER) {
@@ -222,19 +239,60 @@ export function singCante(state: GameState, seat: SeatPosition, suit: Suit): Gam
   if (state.phase !== GamePhase.SINGING) return state;
   if (!state.trumpSuit || !state.biddingTeam) return state;
   if (SEAT_TEAM[seat] !== state.biddingTeam) return state;
-  
+  if (state.singingChoicePending) return state; // must choose singer first
+
   const player = state.players[seat];
   if (!player) return state;
-  
+
   const singable = getSingableSuits(player.hand, state.trumpSuit, state.currentBidAmount, state.cantes, seat, state.biddingTeam);
   if (!singable.includes(suit)) return state;
-  
+
   const isTrump = suit === state.trumpSuit;
   const points = isTrump ? 40 : 20;
-  
+
   state.cantes.push({ suit, isTrump, points, seat });
   state.lastMessage = `${player.name} שר ${SUIT_NAMES_HE[suit]}${isTrump ? ' (אטו)' : ''} — ${points} נקודות`;
-  
+
+  // One suit per trick win — auto finish singing after one cante
+  if (state.singingAfterTrick) {
+    return finishSingingAfterTrick(state);
+  }
+
+  return state;
+}
+
+export function chooseSinger(state: GameState, seat: SeatPosition, choice: 'self' | 'partner'): GameState {
+  if (state.phase !== GamePhase.SINGING) return state;
+  if (!state.singingChoicePending) return state;
+  if (!state.currentBidWinner) return state;
+  // Only the buyer can make this choice
+  if (seat !== state.currentBidWinner) return state;
+
+  state.singingChoicePending = false;
+
+  const buyerSeat = state.currentBidWinner;
+  const partnerSeat = getTeammate(buyerSeat);
+  const singerSeat = choice === 'self' ? buyerSeat : partnerSeat;
+
+  state.currentTurnSeat = singerSeat;
+  state.turnStartedAt = Date.now();
+  state.lastMessage = `${state.players[singerSeat]?.name} שר!`;
+
+  return state;
+}
+
+function finishSingingAfterTrick(state: GameState): GameState {
+  state.singingDone = true;
+  state.singingAfterTrick = false;
+  state.singingChoicePending = false;
+  state.phase = GamePhase.TRICK_PLAY;
+  const lastTrick = state.completedTricks[state.completedTricks.length - 1];
+  if (lastTrick && lastTrick.winnerSeat) {
+    state.trickNumber++;
+    state.currentTurnSeat = lastTrick.winnerSeat;
+    state.turnStartedAt = Date.now();
+    state.currentTrick = { cards: [], leadSeat: lastTrick.winnerSeat };
+  }
   return state;
 }
 
@@ -242,7 +300,12 @@ export function doneSinging(state: GameState, seat: SeatPosition): GameState {
   if (state.phase !== GamePhase.SINGING) return state;
   if (SEAT_TEAM[seat] !== state.biddingTeam) return state;
 
-  // Move to next bidding team member
+  // If singing after a trick win, one suit only — done means skip singing
+  if (state.singingAfterTrick) {
+    return finishSingingAfterTrick(state);
+  }
+
+  // Initial singing (before first trick) — move to next bidding team member
   let nextSeat = getNextSeat(seat);
   for (let i = 0; i < 3; i++) {
     if (SEAT_TEAM[nextSeat] === state.biddingTeam && nextSeat !== seat) {
@@ -261,20 +324,6 @@ export function doneSinging(state: GameState, seat: SeatPosition): GameState {
 
   // No more singing
   state.singingDone = true;
-
-  // If this was singing-after-trick, resume trick play with next trick
-  if (state.singingAfterTrick) {
-    state.singingAfterTrick = false;
-    state.phase = GamePhase.TRICK_PLAY;
-    const lastTrick = state.completedTricks[state.completedTricks.length - 1];
-    if (lastTrick && lastTrick.winnerSeat) {
-      // Winner leads next trick
-      state.trickNumber++;
-      state.currentTurnSeat = lastTrick.winnerSeat;
-      state.turnStartedAt = Date.now();
-      state.currentTrick = { cards: [], leadSeat: lastTrick.winnerSeat };
-    }
-  }
 
   return state;
 }
@@ -379,26 +428,33 @@ export function resolveTrick(state: GameState): GameState {
     return endRound(state);
   }
 
-  // Check if winner is on bidding team and can sing
-  if (state.biddingTeam && winnerTeam === state.biddingTeam && state.trumpSuit) {
-    const canAnySing = checkAnySingingForTeam(state, state.biddingTeam);
-    if (canAnySing) {
+  // Check if winner is on bidding team and can sing (one sing per trick win)
+  if (state.biddingTeam && winnerTeam === state.biddingTeam && state.trumpSuit && state.currentBidWinner) {
+    const buyerSeat = state.currentBidWinner;
+    const partnerSeat = getTeammate(buyerSeat);
+    const buyerCanSing = canSeatSing(state, buyerSeat);
+    const partnerCanSing = canSeatSing(state, partnerSeat);
+
+    if (buyerCanSing || partnerCanSing) {
       state.phase = GamePhase.SINGING;
       state.singingAfterTrick = true;
-      let singingSeat = winner.seat;
-      for (let i = 0; i < 4; i++) {
-        if (SEAT_TEAM[singingSeat] === state.biddingTeam) {
-          const player = state.players[singingSeat];
-          if (player && state.trumpSuit) {
-            const singable = getSingableSuits(player.hand, state.trumpSuit, state.currentBidAmount, state.cantes, singingSeat, state.biddingTeam);
-            if (singable.length > 0) {
-              state.currentTurnSeat = singingSeat;
-              state.lastMessage = `${state.players[singingSeat]?.name} יכול לשיר!`;
-              return state;
-            }
-          }
-        }
-        singingSeat = getNextSeat(singingSeat);
+
+      if (buyerCanSing && partnerCanSing) {
+        // Both can sing — buyer must choose who sings
+        state.singingChoicePending = true;
+        state.currentTurnSeat = buyerSeat;
+        state.lastMessage = `${state.players[buyerSeat]?.name} בוחר מי שר`;
+        return state;
+      } else if (buyerCanSing) {
+        // Only buyer can sing — go directly to buyer
+        state.currentTurnSeat = buyerSeat;
+        state.lastMessage = `${state.players[buyerSeat]?.name} יכול לשיר!`;
+        return state;
+      } else {
+        // Only partner can sing — go directly to partner
+        state.currentTurnSeat = partnerSeat;
+        state.lastMessage = `${state.players[partnerSeat]?.name} יכול לשיר!`;
+        return state;
       }
     }
   }
@@ -623,6 +679,7 @@ export function getClientState(state: GameState, seat: SeatPosition): ClientGame
     capoDeclarerSeat: state.capoDeclarerSeat,
     cantes: state.cantes,
     singingDone: state.singingDone,
+    singingChoicePending: state.singingChoicePending,
     currentTrick: state.currentTrick,
     completedTricks: state.completedTricks,
     trickNumber: state.trickNumber,
@@ -646,6 +703,7 @@ function getValidActions(state: GameState, seat: SeatPosition): ValidActions {
     canDeclareTrump: false,
     canSing: false,
     singableCantes: [],
+    canChooseSinger: false,
     playableCards: [],
     canDeclareCapo: false,
   };
@@ -665,8 +723,12 @@ function getValidActions(state: GameState, seat: SeatPosition): ValidActions {
   }
 
   if (state.phase === GamePhase.SINGING && state.biddingTeam && SEAT_TEAM[seat] === state.biddingTeam) {
-    // Allow singing if it's the current player's turn or if it's singing-after-trick
-    if (state.singingAfterTrick || state.currentTurnSeat === seat) {
+    if (state.singingChoicePending) {
+      // Buyer must choose who sings
+      if (seat === state.currentBidWinner) {
+        actions.canChooseSinger = true;
+      }
+    } else if (state.singingAfterTrick || state.currentTurnSeat === seat) {
       const singable = getSingableSuits(
         player.hand, state.trumpSuit!, state.currentBidAmount, state.cantes, seat, state.biddingTeam
       );
