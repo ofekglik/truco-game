@@ -20,7 +20,18 @@ app.use(cors());
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const clientDist = join(__dirname, '../../client/dist');
-app.use(express.static(clientDist));
+
+// Cache-busting: no-cache for HTML, long cache for hashed assets
+app.use(express.static(clientDist, {
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith('.html')) {
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    } else if (filePath.includes('/assets/')) {
+      // Vite hashed assets — safe to cache long-term
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    }
+  },
+}));
 
 // Health check
 app.get('/health', (_req, res) => res.json({ status: 'ok' }));
@@ -72,6 +83,11 @@ io.use(async (socket, next) => {
 
 // Turn timer system: Map<roomCode, Map<seat, timeoutId>>
 const turnTimers = new Map<string, Map<SeatPosition, NodeJS.Timeout>>();
+
+// Disconnect grace period: Map<socketId, timeoutId>
+// Gives players time to reconnect (e.g. page refresh) before removing them
+const disconnectTimers = new Map<string, NodeJS.Timeout>();
+const DISCONNECT_GRACE_MS = 15000; // 15 seconds
 
 function broadcastState(room: Room | null) {
   if (!room) return;
@@ -160,9 +176,28 @@ io.on('connection', (socket) => {
     socket.emit('roomsList', listRooms());
   });
   
-  // Handle reconnection — client sends this when Socket.IO reconnects
+  // Handle reconnection — client sends this when Socket.IO reconnects or page refreshes
   socket.on('rejoinRoom', ({ roomCode, playerName }: { roomCode: string; playerName: string }) => {
     console.log(`[rejoinRoom] socket=${socket.id}, room=${roomCode}, name=${playerName}`);
+
+    // Cancel any pending disconnect timer for a previous socket with this player name
+    // (The old socket ID is gone, but we can check by room+name)
+    for (const [oldSocketId, timer] of disconnectTimers) {
+      // Check if this timer belongs to the same player in the same room
+      const room = getRoomByCode(roomCode);
+      if (room) {
+        const oldSeat = room.socketToSeat.get(oldSocketId);
+        if (oldSeat) {
+          const oldPlayer = room.state.players[oldSeat];
+          if (oldPlayer && oldPlayer.name.trim().toLowerCase() === playerName.trim().toLowerCase()) {
+            console.log(`[rejoinRoom] cancelling disconnect timer for old socket ${oldSocketId}`);
+            clearTimeout(timer);
+            disconnectTimers.delete(oldSocketId);
+          }
+        }
+      }
+    }
+
     const result = joinRoom(roomCode, socket.id, playerName);
     if ('error' in result) {
       console.log(`[rejoinRoom] failed: ${result.error}`);
@@ -342,18 +377,27 @@ io.on('connection', (socket) => {
   });
 
   socket.on('disconnect', () => {
-    console.log(`Player disconnected: ${socket.id}`);
-    const result = removePlayer(socket.id);
-    if (result) {
-      io.to(result.room.code).emit('playerLeft', { seat: result.seat });
-      broadcastState(result.room);
-    }
-    broadcastRoomsList();
+    console.log(`Player disconnected: ${socket.id} — starting ${DISCONNECT_GRACE_MS}ms grace period`);
+
+    // Grace period: wait before removing the player, in case they're just refreshing
+    const timer = setTimeout(() => {
+      disconnectTimers.delete(socket.id);
+      console.log(`[disconnect] grace period expired for ${socket.id}, removing player`);
+      const result = removePlayer(socket.id);
+      if (result) {
+        io.to(result.room.code).emit('playerLeft', { seat: result.seat });
+        broadcastState(result.room);
+      }
+      broadcastRoomsList();
+    }, DISCONNECT_GRACE_MS);
+
+    disconnectTimers.set(socket.id, timer);
   });
 });
 
 // SPA fallback — serve index.html for any non-API/socket route
 app.get('*', (_req, res) => {
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
   res.sendFile(join(clientDist, 'index.html'));
 });
 

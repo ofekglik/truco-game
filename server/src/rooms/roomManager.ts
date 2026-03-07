@@ -69,27 +69,30 @@ export function joinRoom(roomCode: string, socketId: string, playerName: string,
   const room = rooms.get(roomCode.toUpperCase());
   if (!room) return { error: 'חדר לא נמצא' };
 
-  if (room.state.phase !== GamePhase.WAITING) {
-    // Check if reconnecting — match by name (case-insensitive, trimmed)
-    const normalizedName = playerName.trim().toLowerCase();
-    for (const seat of SEAT_ORDER) {
-      const player = room.state.players[seat];
-      if (player && player.name.trim().toLowerCase() === normalizedName) {
-        // Reconnect — allow even if still marked connected (socket might have changed)
-        const oldSid = room.seatToSocket.get(seat);
-        if (oldSid) {
-          room.socketToSeat.delete(oldSid);
-          socketToRoom.delete(oldSid);
-        }
-        room.seatToSocket.set(seat, socketId);
-        room.socketToSeat.set(socketId, seat);
-        socketToRoom.set(socketId, room.code);
-        player.id = socketId;
-        player.connected = true;
-        console.log(`[roomManager] Reconnected ${playerName} to seat ${seat} (socket ${socketId})`);
-        return { room, seat };
+  // Check if reconnecting — match by name (case-insensitive, trimmed)
+  // Works in ALL phases (WAITING, active game, etc.)
+  const normalizedName = playerName.trim().toLowerCase();
+  for (const seat of SEAT_ORDER) {
+    const player = room.state.players[seat];
+    if (player && player.name.trim().toLowerCase() === normalizedName) {
+      // Reconnect — allow even if still marked connected (socket might have changed)
+      const oldSid = room.seatToSocket.get(seat);
+      if (oldSid) {
+        room.socketToSeat.delete(oldSid);
+        socketToRoom.delete(oldSid);
       }
+      room.seatToSocket.set(seat, socketId);
+      room.socketToSeat.set(socketId, seat);
+      socketToRoom.set(socketId, room.code);
+      player.id = socketId;
+      player.connected = true;
+      console.log(`[roomManager] Reconnected ${playerName} to seat ${seat} in phase ${room.state.phase} (socket ${socketId})`);
+      return { room, seat };
     }
+  }
+
+  // Not a reconnection — if game already started, reject new joins
+  if (room.state.phase !== GamePhase.WAITING) {
     return { error: 'המשחק כבר התחיל' };
   }
 
@@ -174,13 +177,20 @@ export function removePlayer(socketId: string): { room: Room; seat: SeatPosition
   }
 
   room.socketToSeat.delete(socketId);
+  room.seatToSocket.delete(seat);
   socketToRoom.delete(socketId);
 
   // Check if room is empty
   const connectedPlayers = SEAT_ORDER.filter(s => room.state.players[s]?.connected);
   if (connectedPlayers.length === 0) {
-    rooms.delete(code);
-    return null;
+    // In WAITING phase, delete room immediately
+    // In active game, keep the room alive for a bit (grace period handled by caller)
+    if (room.state.phase === GamePhase.WAITING) {
+      rooms.delete(code);
+      return null;
+    }
+    // For active games, keep room alive so players can reconnect
+    // Room will be cleaned up eventually if no one returns
   }
 
   return { room, seat };
