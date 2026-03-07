@@ -287,7 +287,7 @@ export const GameTable: React.FC<GameTableProps> = ({
 
     const posClasses = isMobile ? {
       left: 'absolute left-1 top-1/2 -translate-y-1/2',
-      top: 'absolute top-1 left-1/2 -translate-x-1/2',
+      top: 'absolute top-12 left-1/2 -translate-x-1/2',
       right: 'absolute right-1 top-1/2 -translate-y-1/2',
     } : {
       left: 'absolute left-2 top-1/2 -translate-y-1/2',
@@ -299,7 +299,7 @@ export const GameTable: React.FC<GameTableProps> = ({
       <div key={seat} className={`${posClasses[pos]} z-20`}>
         {/* Poker HUD Badge — compact on mobile */}
         <div className={`relative backdrop-blur-sm border-2 transition-all ${
-          isMobile ? 'rounded-lg px-2 py-1.5' : 'rounded-xl px-4 py-3'
+          isMobile ? 'rounded-md px-1.5 py-1' : 'rounded-xl px-4 py-3'
         } ${
           isCurrentTurn
             ? `bg-yellow-500/30 border-yellow-400 shadow-lg shadow-yellow-400/50 animate-turnPulse`
@@ -1165,33 +1165,24 @@ export const GameTable: React.FC<GameTableProps> = ({
 
       {isMobile ? (
         <>
-          {/* Mobile top-left: trick counter + score */}
-          <div className="absolute top-1 left-1 right-10 z-20 flex items-center gap-1.5 flex-wrap">
-            <div className="bg-black/60 backdrop-blur-sm rounded-md px-2 py-1 text-[10px]">
-              <span className="text-gray-400">לקיחה </span>
-              <span className="text-white font-bold">{gameState.trickNumber}/10</span>
-              <span className="text-gray-500 mx-1">|</span>
-              <span className="text-blue-400">{gameState.team1TricksWon}</span>
-              <span className="text-gray-500">-</span>
-              <span className="text-red-400">{gameState.team2TricksWon}</span>
-            </div>
-
-            {/* Score pill */}
-            <button onClick={() => setShowScorePill(!showScorePill)}
-              className="bg-black/60 backdrop-blur-sm rounded-md px-2 py-1 text-[10px] font-bold border border-gray-700">
-              <span className="text-blue-400">{gameState.scores.team1}</span>
-              <span className="text-gray-500 mx-1">-</span>
-              <span className="text-red-400">{gameState.scores.team2}</span>
-            </button>
-
-            {/* Singing indicators */}
+          {/* Mobile: single score pill at top center */}
+          <button onClick={() => setShowScorePill(!showScorePill)}
+            className="absolute top-1 left-1/2 -translate-x-1/2 z-20 bg-black/70 backdrop-blur-sm rounded-full px-3 py-1 text-[10px] font-bold border border-gray-700 flex items-center gap-1.5">
+            <span className="text-blue-400">{gameState.scores.team1}</span>
+            <span className="text-gray-500">-</span>
+            <span className="text-red-400">{gameState.scores.team2}</span>
+            <span className="text-gray-600 mx-0.5">|</span>
+            <span className="text-gray-400">{gameState.trickNumber}/10</span>
+            <span className="text-gray-600 mx-0.5">|</span>
+            <span className="text-blue-400">{gameState.team1TricksWon}</span>
+            <span className="text-gray-500">-</span>
+            <span className="text-red-400">{gameState.team2TricksWon}</span>
             {gameState.cantes.map((c, i) => (
-              <div key={i} className="bg-black/60 backdrop-blur-sm rounded-md px-1.5 py-1 text-[9px]"
-                style={{ color: SUIT_COLORS[c.suit] }}>
-                {SUIT_SYMBOLS[c.suit]} {c.points}
-              </div>
+              <span key={i} className="text-[9px]" style={{ color: SUIT_COLORS[c.suit] }}>
+                {SUIT_SYMBOLS[c.suit]}{c.points}
+              </span>
             ))}
-          </div>
+          </button>
 
           {/* Mobile: Trump + bid info — centered on board, slight opacity */}
           {gameState.trumpSuit && (
@@ -1212,10 +1203,10 @@ export const GameTable: React.FC<GameTableProps> = ({
             </div>
           )}
 
-          {/* Mobile message bar */}
-          <div className="absolute top-8 right-10 left-2 z-20">
-            <div className={`px-3 py-1.5 rounded-md text-xs font-medium backdrop-blur-sm truncate ${
-              isMyTurn ? 'bg-yellow-600/80 text-black' : 'bg-black/60 text-gray-200'
+          {/* Mobile: thin message bar below score pill */}
+          <div className="absolute top-7 left-2 right-10 z-20">
+            <div className={`px-2 py-0.5 rounded text-[10px] font-medium backdrop-blur-sm truncate ${
+              isMyTurn ? 'bg-yellow-600/70 text-black' : 'bg-black/50 text-gray-300'
             }`}>
               {gameState.lastMessage}
               {isMyTurn && ' ◀ תורך!'}
