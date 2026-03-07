@@ -75,6 +75,7 @@ export const GameTable: React.FC<GameTableProps> = ({
   const [trickToast, setTrickToast] = useState<{ winner: string; team1: number; team2: number } | null>(null);
   const [lastCompletedTricksLength, setLastCompletedTricksLength] = useState(0);
   const [windowWidth, setWindowWidth] = useState(window.innerWidth);
+  const [windowHeight, setWindowHeight] = useState(window.innerHeight);
   const [showScorePill, setShowScorePill] = useState(false);
   const [draggingCardId, setDraggingCardId] = useState<string | null>(null);
 
@@ -95,13 +96,21 @@ export const GameTable: React.FC<GameTableProps> = ({
   const { validActions } = gameState;
   const isMyTurn = gameState.currentTurnSeat === gameState.mySeat;
   const isMobile = windowWidth < 768;
-  const isLandscape = window.innerHeight < window.innerWidth;
+  const isLandscape = windowHeight < windowWidth;
 
-  // Window resize listener
+  // Window resize listener — tracks both width and height for orientation changes
   useEffect(() => {
-    const handleResize = () => setWindowWidth(window.innerWidth);
+    const handleResize = () => {
+      setWindowWidth(window.innerWidth);
+      setWindowHeight(window.innerHeight);
+    };
     window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
+    // Also listen to orientationchange for mobile Safari
+    window.addEventListener('orientationchange', () => setTimeout(handleResize, 100));
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      window.removeEventListener('orientationchange', () => setTimeout(handleResize, 100));
+    };
   }, []);
 
   useEffect(() => {
@@ -276,7 +285,11 @@ export const GameTable: React.FC<GameTableProps> = ({
     const teamColor = team === 'team1' ? '#3B82F6' : '#DC2626';
     const teamBg = team === 'team1' ? 'from-blue-900/50 to-blue-800/50' : 'from-red-900/50 to-red-800/50';
 
-    const posClasses = {
+    const posClasses = isMobile ? {
+      left: 'absolute left-1 top-1/2 -translate-y-1/2',
+      top: 'absolute top-1 left-1/2 -translate-x-1/2',
+      right: 'absolute right-1 top-1/2 -translate-y-1/2',
+    } : {
       left: 'absolute left-2 top-1/2 -translate-y-1/2',
       top: 'absolute top-2 left-1/2 -translate-x-1/2',
       right: 'absolute right-2 top-1/2 -translate-y-1/2',
@@ -284,41 +297,47 @@ export const GameTable: React.FC<GameTableProps> = ({
 
     return (
       <div key={seat} className={`${posClasses[pos]} z-20`}>
-        {/* Poker HUD Badge */}
-        <div className={`relative rounded-xl px-4 py-3 backdrop-blur-sm border-2 transition-all ${
+        {/* Poker HUD Badge — compact on mobile */}
+        <div className={`relative backdrop-blur-sm border-2 transition-all ${
+          isMobile ? 'rounded-lg px-2 py-1.5' : 'rounded-xl px-4 py-3'
+        } ${
           isCurrentTurn
             ? 'bg-yellow-500/30 border-yellow-400 shadow-lg shadow-yellow-400/50'
             : `bg-gradient-to-br ${teamBg} border-gray-600`
         } ${!player.connected ? 'opacity-50' : ''}`}>
           {/* Team color indicator bar */}
-          <div className="absolute top-0 left-0 right-0 h-1 rounded-t-[9px]" style={{ backgroundColor: teamColor }} />
+          <div className={`absolute top-0 left-0 right-0 h-1 ${isMobile ? 'rounded-t-[5px]' : 'rounded-t-[9px]'}`} style={{ backgroundColor: teamColor }} />
 
           {/* Player info */}
-          <div className="flex items-center gap-2 min-w-max">
+          <div className={`flex items-center ${isMobile ? 'gap-1' : 'gap-2 min-w-max'}`}>
             {player.avatar && (
-              <span className="text-2xl">{player.avatar}</span>
+              <span className={isMobile ? 'text-base' : 'text-2xl'}>{player.avatar}</span>
             )}
             <div className="flex flex-col">
-              <div className="text-sm font-bold text-white leading-tight">
+              <div className={`font-bold text-white leading-tight ${isMobile ? 'text-[10px] max-w-[60px] truncate' : 'text-sm'}`}>
                 {player.name}
-                {!player.connected && <span className="text-xs text-red-400 ml-1">(מנותק)</span>}
+                {!player.connected && <span className={`text-red-400 ml-1 ${isMobile ? 'text-[8px]' : 'text-xs'}`}>(מנותק)</span>}
               </div>
-              {/* Card count indicator */}
-              <div className="flex gap-1 mt-1">
-                {Array.from({ length: Math.min(10, player.cardCount) }, (_, i) => (
-                  <div
-                    key={i}
-                    className="w-1.5 h-1.5 rounded-full"
-                    style={{ backgroundColor: teamColor }}
-                  />
-                ))}
-                {player.cardCount > 10 && (
-                  <span className="text-xs text-gray-300 ml-1">+{player.cardCount - 10}</span>
-                )}
-              </div>
+              {/* Card count — dots on desktop, number on mobile */}
+              {isMobile ? (
+                <div className="text-[9px] text-gray-400">{player.cardCount} קלפים</div>
+              ) : (
+                <div className="flex gap-1 mt-1">
+                  {Array.from({ length: Math.min(10, player.cardCount) }, (_, i) => (
+                    <div
+                      key={i}
+                      className="w-1.5 h-1.5 rounded-full"
+                      style={{ backgroundColor: teamColor }}
+                    />
+                  ))}
+                  {player.cardCount > 10 && (
+                    <span className="text-xs text-gray-300 ml-1">+{player.cardCount - 10}</span>
+                  )}
+                </div>
+              )}
             </div>
           </div>
-          {isCurrentTurn && renderTurnTimer()}
+          {isCurrentTurn && !isMobile && renderTurnTimer()}
         </div>
       </div>
     );
@@ -327,17 +346,16 @@ export const GameTable: React.FC<GameTableProps> = ({
   const renderTrickCards = () => {
     const cards = gameState.currentTrick.cards;
     const cardCount = cards.length;
+    // Spread radius: tighter on mobile, wider on desktop for large cards
+    const radius = isMobile ? 40 : 85;
 
     return cards.map((tc, i) => {
-      // Center fan layout: cards are offset and rotated around a central point
       const angleStep = cardCount > 1 ? 360 / cardCount : 0;
       const angle = i * angleStep;
-      const radius = 60; // distance from center
-      const rotation = angle - 90; // rotate around the pile
 
       const x = Math.cos((angle * Math.PI) / 180) * radius;
       const y = Math.sin((angle * Math.PI) / 180) * radius;
-      const cardRotation = ((i - Math.floor(cardCount / 2)) * 8) % 360; // subtle rotation per card
+      const cardRotation = ((i - Math.floor(cardCount / 2)) * 8) % 360;
 
       return (
         <div
@@ -350,9 +368,10 @@ export const GameTable: React.FC<GameTableProps> = ({
             animationDelay: `${i * 100}ms`,
           }}
         >
+          {/* Trick cards: medium on mobile, large on desktop */}
           <CardComponent
             card={tc.card}
-            small
+            large={!isMobile}
           />
         </div>
       );
@@ -837,7 +856,7 @@ export const GameTable: React.FC<GameTableProps> = ({
   const fanHeightPx = 30;
 
   return (
-    <div className="w-screen h-screen relative overflow-hidden bg-[#0d1b0e]">
+    <div className="w-screen relative overflow-hidden bg-[#0d1b0e]" style={{ height: '100dvh' }}>
       <style>{`
         @keyframes slideIn {
           from {
@@ -967,11 +986,22 @@ export const GameTable: React.FC<GameTableProps> = ({
         }
       `}</style>
 
+      {/* Landscape blocker — shown only on phones in landscape */}
+      {isMobile && isLandscape && (
+        <div className="fixed inset-0 z-[100] bg-[#0d1b0e] flex flex-col items-center justify-center gap-4">
+          <div className="text-6xl">📱</div>
+          <p className="text-white text-lg font-bold">סובב את המכשיר לאורך</p>
+          <p className="text-gray-400 text-sm">המשחק עובד רק במצב portrait</p>
+        </div>
+      )}
+
       {/* Table felt */}
-      <div className={`absolute inset-8 rounded-[3rem] bg-gradient-to-br from-[#1a5c2a] to-[#0f3d1a] border-[12px] border-[#3a2010] shadow-inner ${
-        isMobile ? 'inset-4' : ''
-      }`}>
-        <div className="absolute inset-2 rounded-[2.5rem] border border-[#2a6a3a]/30" />
+      <div className={`absolute rounded-[2rem] bg-gradient-to-br from-[#1a5c2a] to-[#0f3d1a] shadow-inner ${
+        isMobile
+          ? 'left-2 right-2 top-2 border-[6px] border-[#3a2010]'
+          : 'inset-8 rounded-[3rem] border-[12px] border-[#3a2010]'
+      }`} style={isMobile ? { bottom: '170px' } : undefined}>
+        <div className={`absolute inset-1 border border-[#2a6a3a]/30 ${isMobile ? 'rounded-[1.5rem]' : 'rounded-[2.5rem]'}`} />
 
         {renderTrickCards()}
         {renderOtherPlayer('left')}
@@ -1074,89 +1104,144 @@ export const GameTable: React.FC<GameTableProps> = ({
         </div>
       )}
 
-      {/* Trick counter */}
-      <div className="absolute top-3 left-4 z-20 bg-black/60 backdrop-blur-sm rounded-lg px-3 py-1.5 text-sm">
-        <span className="text-gray-400">לקיחה: </span>
-        <span className="text-white font-bold">{gameState.trickNumber}/10</span>
-        <span className="text-gray-500 mx-2">|</span>
-        <span className="text-blue-400">{gameState.team1TricksWon}</span>
-        <span className="text-gray-500"> - </span>
-        <span className="text-red-400">{gameState.team2TricksWon}</span>
-      </div>
+      {/* === Top HUD — compact on mobile === */}
 
-      {/* Trump Badge - Top Right */}
-      {gameState.trumpSuit && (
-        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20">
-          <div
-            className="rounded-xl px-5 py-3 backdrop-blur-md border-2 shadow-lg transition-all"
-            style={{
-              backgroundColor: `${SUIT_COLORS[gameState.trumpSuit]}22`,
-              borderColor: SUIT_COLORS[gameState.trumpSuit],
-              boxShadow: `0 0 20px ${SUIT_COLORS[gameState.trumpSuit]}88`,
-            }}
-          >
-            <div className="flex items-center gap-2">
-              <span className="text-2xl">{SUIT_SYMBOLS[gameState.trumpSuit]}</span>
-              <div className="flex flex-col">
-                <span className="text-xs text-gray-400">אטו</span>
-                <span className="text-sm font-bold" style={{ color: SUIT_COLORS[gameState.trumpSuit] }}>
-                  {SUIT_NAMES_HE[gameState.trumpSuit]}
-                </span>
+      {isMobile ? (
+        <>
+          {/* Mobile top bar: trick counter + trump + score in one compact row */}
+          <div className="absolute top-1 left-1 right-10 z-20 flex items-center gap-1.5 flex-wrap">
+            {/* Trick counter */}
+            <div className="bg-black/60 backdrop-blur-sm rounded-md px-2 py-1 text-[10px]">
+              <span className="text-gray-400">לקיחה </span>
+              <span className="text-white font-bold">{gameState.trickNumber}/10</span>
+              <span className="text-gray-500 mx-1">|</span>
+              <span className="text-blue-400">{gameState.team1TricksWon}</span>
+              <span className="text-gray-500">-</span>
+              <span className="text-red-400">{gameState.team2TricksWon}</span>
+            </div>
+
+            {/* Trump badge inline */}
+            {gameState.trumpSuit && (
+              <div className="rounded-md px-2 py-1 backdrop-blur-sm border text-[10px]"
+                style={{
+                  backgroundColor: `${SUIT_COLORS[gameState.trumpSuit]}22`,
+                  borderColor: SUIT_COLORS[gameState.trumpSuit],
+                  color: SUIT_COLORS[gameState.trumpSuit],
+                }}>
+                <span className="font-bold">{SUIT_SYMBOLS[gameState.trumpSuit]} {SUIT_NAMES_HE[gameState.trumpSuit]}</span>
               </div>
+            )}
+
+            {/* Score pill */}
+            <button onClick={() => setShowScorePill(!showScorePill)}
+              className="bg-black/60 backdrop-blur-sm rounded-md px-2 py-1 text-[10px] font-bold border border-gray-700">
+              <span className="text-blue-400">{gameState.scores.team1}</span>
+              <span className="text-gray-500 mx-1">-</span>
+              <span className="text-red-400">{gameState.scores.team2}</span>
+            </button>
+
+            {/* Singing indicators inline */}
+            {gameState.cantes.map((c, i) => (
+              <div key={i} className="bg-black/60 backdrop-blur-sm rounded-md px-1.5 py-1 text-[9px]"
+                style={{ color: SUIT_COLORS[c.suit] }}>
+                {SUIT_SYMBOLS[c.suit]} {c.points}
+              </div>
+            ))}
+          </div>
+
+          {/* Mobile message bar — below top row */}
+          <div className="absolute top-8 left-2 right-10 z-20">
+            <div className={`px-3 py-1 rounded-md text-xs font-medium backdrop-blur-sm truncate ${
+              isMyTurn ? 'bg-yellow-600/80 text-black' : 'bg-black/60 text-gray-200'
+            }`}>
+              {gameState.lastMessage}
+              {isMyTurn && ' ◀ תורך!'}
             </div>
           </div>
-        </div>
-      )}
+        </>
+      ) : (
+        <>
+          {/* Desktop: original layout */}
+          <div className="absolute top-3 left-4 z-20 bg-black/60 backdrop-blur-sm rounded-lg px-3 py-1.5 text-sm">
+            <span className="text-gray-400">לקיחה: </span>
+            <span className="text-white font-bold">{gameState.trickNumber}/10</span>
+            <span className="text-gray-500 mx-2">|</span>
+            <span className="text-blue-400">{gameState.team1TricksWon}</span>
+            <span className="text-gray-500"> - </span>
+            <span className="text-red-400">{gameState.team2TricksWon}</span>
+          </div>
 
-      {/* Score Pill - Top Center */}
-      <button
-        onClick={() => setShowScorePill(!showScorePill)}
-        className="absolute top-16 left-1/2 -translate-x-1/2 z-20 transition-all"
-      >
-        <div className="bg-gradient-to-r from-blue-900/80 to-red-900/80 backdrop-blur-sm rounded-full px-4 py-2 text-sm font-bold border border-gray-600 hover:border-yellow-400 hover:shadow-lg hover:shadow-yellow-400/50">
-          <span className="text-blue-400">🔵{gameState.scores.team1}</span>
-          <span className="text-gray-500 mx-2">-</span>
-          <span className="text-red-400">🔴{gameState.scores.team2}</span>
-        </div>
-      </button>
+          {gameState.trumpSuit && (
+            <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20">
+              <div
+                className="rounded-xl px-5 py-3 backdrop-blur-md border-2 shadow-lg transition-all"
+                style={{
+                  backgroundColor: `${SUIT_COLORS[gameState.trumpSuit]}22`,
+                  borderColor: SUIT_COLORS[gameState.trumpSuit],
+                  boxShadow: `0 0 20px ${SUIT_COLORS[gameState.trumpSuit]}88`,
+                }}
+              >
+                <div className="flex items-center gap-2">
+                  <span className="text-2xl">{SUIT_SYMBOLS[gameState.trumpSuit]}</span>
+                  <div className="flex flex-col">
+                    <span className="text-xs text-gray-400">אטו</span>
+                    <span className="text-sm font-bold" style={{ color: SUIT_COLORS[gameState.trumpSuit] }}>
+                      {SUIT_NAMES_HE[gameState.trumpSuit]}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <button
+            onClick={() => setShowScorePill(!showScorePill)}
+            className="absolute top-16 left-1/2 -translate-x-1/2 z-20 transition-all"
+          >
+            <div className="bg-gradient-to-r from-blue-900/80 to-red-900/80 backdrop-blur-sm rounded-full px-4 py-2 text-sm font-bold border border-gray-600 hover:border-yellow-400 hover:shadow-lg hover:shadow-yellow-400/50">
+              <span className="text-blue-400">🔵{gameState.scores.team1}</span>
+              <span className="text-gray-500 mx-2">-</span>
+              <span className="text-red-400">🔴{gameState.scores.team2}</span>
+            </div>
+          </button>
+
+          <div className="absolute top-28 left-1/2 -translate-x-1/2 z-20">
+            <div className={`px-4 py-2 rounded-full text-sm font-medium backdrop-blur-sm ${
+              isMyTurn ? 'bg-yellow-600/80 text-black' : 'bg-black/60 text-gray-200'
+            }`}>
+              {gameState.lastMessage}
+              {isMyTurn && ' ◀ תורך!'}
+            </div>
+          </div>
+
+          {gameState.cantes.length > 0 && (
+            <div className="absolute top-16 left-1/2 -translate-x-1/2 z-20 flex gap-2 flex-wrap justify-center max-w-xs">
+              {gameState.cantes.map((c, i) => (
+                <div key={i} className="bg-black/60 backdrop-blur-sm rounded-lg px-2 py-1 text-xs"
+                  style={{ color: SUIT_COLORS[c.suit] }}>
+                  {SUIT_SYMBOLS[c.suit]} {c.points} נק׳
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      )}
 
       {/* Score Pill Expanded */}
       {showScorePill && (
-        <div className="absolute inset-0 z-50 bg-black/50 flex items-center justify-center" onClick={() => setShowScorePill(false)}>
+        <div className={`${isMobile ? 'fixed' : 'absolute'} inset-0 z-50 bg-black/50 flex items-center justify-center`} onClick={() => setShowScorePill(false)}>
           <div onClick={e => e.stopPropagation()}>
             <Scoreboard gameState={gameState} onClose={() => setShowScorePill(false)} />
           </div>
         </div>
       )}
 
-      {/* Message bar */}
-      <div className="absolute top-28 left-1/2 -translate-x-1/2 z-20">
-        <div className={`px-4 py-2 rounded-full text-sm font-medium backdrop-blur-sm ${
-          isMyTurn ? 'bg-yellow-600/80 text-black' : 'bg-black/60 text-gray-200'
-        }`}>
-          {gameState.lastMessage}
-          {isMyTurn && ' ◀ תורך!'}
-        </div>
-      </div>
-
-      {/* Singing indicators */}
-      {gameState.cantes.length > 0 && (
-        <div className="absolute top-16 left-1/2 -translate-x-1/2 z-20 flex gap-2 flex-wrap justify-center max-w-xs">
-          {gameState.cantes.map((c, i) => (
-            <div key={i} className="bg-black/60 backdrop-blur-sm rounded-lg px-2 py-1 text-xs"
-              style={{ color: SUIT_COLORS[c.suit] }}>
-              {SUIT_SYMBOLS[c.suit]} {c.points} נק׳
-            </div>
-          ))}
-        </div>
-      )}
-
       {/* My hand - Fan layout */}
       <div
-        className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 cursor-grab active:cursor-grabbing"
+        className="absolute bottom-2 left-1/2 -translate-x-1/2 z-20 cursor-grab active:cursor-grabbing"
         style={{
-          width: Math.max(300, cardCount * (isMobile ? 60 : 80)),
-          height: isMobile ? 200 : 260,
+          width: isMobile ? Math.min(windowWidth - 16, Math.max(280, cardCount * 48)) : Math.max(300, cardCount * 80),
+          height: isMobile ? 160 : 260,
         }}
         onMouseMove={handleDragMove}
         onMouseUp={handleDragEnd}
@@ -1181,7 +1266,7 @@ export const GameTable: React.FC<GameTableProps> = ({
                 className={`absolute transition-all ${isDragging ? 'opacity-50' : ''}`}
                 style={{
                   bottom: `${yOffset}px`,
-                  left: `calc(50% + ${offset * (isMobile ? 45 : 62)}px)`,
+                  left: `calc(50% + ${offset * (isMobile ? 38 : 62)}px)`,
                   transform: `translateX(-50%) rotate(${rotation}deg) ${isSelected ? 'translateY(-20px)' : ''}`,
                   transformOrigin: 'bottom center',
                   zIndex: isSelected ? 100 : i,
@@ -1239,7 +1324,7 @@ export const GameTable: React.FC<GameTableProps> = ({
 
       {/* My name - positioned at the table edge, above card hand */}
       <div className="absolute left-1/2 -translate-x-1/2 z-20"
-        style={{ bottom: isMobile ? '195px' : '255px' }}>
+        style={{ bottom: isMobile ? '155px' : '255px' }}>
         {gameState.players[gameState.mySeat] && (
           <div className={`relative px-3 py-1 rounded-lg text-xs font-medium border ${
             isMyTurn ? 'bg-yellow-600/30 border-yellow-500 text-yellow-300' : 'bg-[#1a2a4e]/80 border-gray-600 text-gray-400'

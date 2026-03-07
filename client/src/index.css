@@ -13,11 +13,39 @@ body {
   direction: rtl;
   background: #1a1a2e;
   color: white;
-  min-height: 100vh;
+  /* Use dvh for dynamic viewport height — prevents jumps when mobile browser chrome shows/hides */
+  min-height: 100dvh;
   overflow: hidden;
+  /* Prevent pull-to-refresh and overscroll bounce on mobile */
+  overscroll-behavior: none;
+  -webkit-overflow-scrolling: touch;
+  /* Prevent text selection during gameplay */
+  -webkit-user-select: none;
+  user-select: none;
+  /* Prevent tap highlight on iOS */
+  -webkit-tap-highlight-color: transparent;
 }
 
 #root {
   width: 100vw;
+  height: 100dvh;
+  /* Fallback for older browsers */
   height: 100vh;
+}
+
+/* Support safe-area-inset for devices with notches */
+@supports (padding: env(safe-area-inset-top)) {
+  #root {
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+}
+
+/* Landscape orientation overlay — prompt user to rotate back */
+@media screen and (orientation: landscape) and (max-height: 500px) {
+  .landscape-block {
+    display: flex !important;
+  }
 }
