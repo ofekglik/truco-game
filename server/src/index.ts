@@ -82,13 +82,10 @@ io.use(async (socket, next) => {
   }
 });
 
-// Turn timer system: Map<roomCode, Map<seat, timeoutId>>
-const turnTimers = new Map<string, Map<SeatPosition, NodeJS.Timeout>>();
-
 // Disconnect grace period: Map<socketId, timeoutId>
 // Gives players time to reconnect (e.g. page refresh) before removing them
 const disconnectTimers = new Map<string, NodeJS.Timeout>();
-const DISCONNECT_GRACE_MS = 15000; // 15 seconds
+const DISCONNECT_GRACE_MS = 300000; // 5 minutes
 
 function broadcastState(room: Room | null) {
   if (!room) return;
@@ -100,68 +97,6 @@ function broadcastState(room: Room | null) {
     }
   }
 
-  // Set up turn timer if needed
-  setUpTurnTimer(room);
-}
-
-function setUpTurnTimer(room: Room) {
-  const { code, state } = room;
-
-  // Clear existing timers for this room
-  const roomTimers = turnTimers.get(code);
-  if (roomTimers) {
-    roomTimers.forEach(timer => clearTimeout(timer));
-    roomTimers.clear();
-  }
-
-  // Set new timer if in a phase that needs one
-  const phasesNeedingTimer = [GamePhase.BIDDING, GamePhase.TRICK_PLAY, GamePhase.TRUMP_DECLARATION, GamePhase.SINGING];
-  if (phasesNeedingTimer.includes(state.phase)) {
-    // Snapshot state at timer creation to detect stale timers
-    const timerPhase = state.phase;
-    const timerSeat = state.currentTurnSeat;
-    const timerRound = state.roundNumber;
-    const timerTrick = state.trickNumber;
-
-    const timer = setTimeout(() => {
-      // Verify this timer is still relevant (not stale)
-      if (state.phase !== timerPhase || state.currentTurnSeat !== timerSeat ||
-          state.roundNumber !== timerRound || state.trickNumber !== timerTrick) {
-        console.log(`[turnTimeout] STALE timer ignored: was for round=${timerRound} trick=${timerTrick} phase=${timerPhase} seat=${timerSeat}, now round=${state.roundNumber} trick=${state.trickNumber} phase=${state.phase} seat=${state.currentTurnSeat}`);
-        return;
-      }
-
-      const socketId = room.seatToSocket.get(state.currentTurnSeat);
-      if (!socketId) return;
-
-      console.log(`[turnTimeout] ${state.currentTurnSeat} in room ${code} phase ${state.phase}`);
-
-      if (state.phase === GamePhase.BIDDING) {
-        placeBid(state, state.currentTurnSeat, 0); // auto-pass
-      } else if (state.phase === GamePhase.TRUMP_DECLARATION) {
-        // Auto-declare the first suit available
-        const suits = Object.values(Suit);
-        if (suits.length > 0) {
-          declareTrump(state, state.currentTurnSeat, suits[0]);
-        }
-      } else if (state.phase === GamePhase.SINGING) {
-        doneSinging(state, state.currentTurnSeat);
-      } else if (state.phase === GamePhase.TRICK_PLAY) {
-        const player = state.players[state.currentTurnSeat];
-        if (player && player.hand.length > 0) {
-          // Play first card
-          playCard(state, state.currentTurnSeat, player.hand[0].id);
-        }
-      }
-
-      broadcastState(room);
-    }, 60000); // 60 second timeout
-
-    if (!turnTimers.has(code)) {
-      turnTimers.set(code, new Map());
-    }
-    turnTimers.get(code)!.set(state.currentTurnSeat, timer);
-  }
 }
 
 // Broadcast updated room list to all connected sockets (for lobby)

@@ -273,44 +273,7 @@ export const GameTable: React.FC<GameTableProps> = ({
     handleDragEnd();
   }, [handleDragEnd]);
 
-  // Turn timer — rendered as a top-of-screen bar visible to all
-  const renderTurnTimerBar = () => {
-    if (gameState.phase !== GamePhase.TRICK_PLAY && gameState.phase !== GamePhase.BIDDING) return null;
-    const elapsed = (Date.now() - gameState.turnStartedAt) / 1000;
-    const remaining = Math.max(0, 60 - elapsed);
-    const progress = Math.max(0, Math.min(1, remaining / 60));
-    const isLowTime = remaining < 10;
-    const turnPlayer = gameState.players[gameState.currentTurnSeat];
-    if (!turnPlayer) return null;
-
-    return (
-      <div className={`fixed top-0 left-0 right-0 z-30 ${isMobile ? 'h-5' : 'h-6'}`}>
-        {/* Background */}
-        <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
-        {/* Progress bar */}
-        <div
-          className="absolute top-0 left-0 h-full transition-all duration-500 ease-linear"
-          style={{
-            width: `${progress * 100}%`,
-            backgroundColor: isLowTime ? '#ef4444' : isMyTurn ? '#eab308' : '#6b7280',
-          }}
-        />
-        {/* Label */}
-        <div className="absolute inset-0 flex items-center justify-center gap-2" dir="rtl">
-          <span className={`font-bold ${isMobile ? 'text-[10px]' : 'text-xs'} ${
-            isMyTurn ? 'text-yellow-300' : 'text-gray-300'
-          }`}>
-            {isMyTurn ? 'תורך!' : `תור ${turnPlayer.name}`}
-          </span>
-          <span className={`font-mono font-bold ${isMobile ? 'text-[10px]' : 'text-xs'} ${
-            isLowTime ? 'text-red-400 animate-pulse' : 'text-white'
-          }`}>
-            {Math.ceil(remaining)}s
-          </span>
-        </div>
-      </div>
-    );
-  };
+  // Turn timer removed — no longer needed
 
   const renderOtherPlayer = (pos: 'left' | 'top' | 'right') => {
     const order: SeatPosition[] = ['south', 'east', 'north', 'west'];
@@ -1093,8 +1056,7 @@ export const GameTable: React.FC<GameTableProps> = ({
 
       {/* Landscape mode is now supported — no blocker */}
 
-      {/* Turn timer bar — always visible at very top */}
-      {renderTurnTimerBar()}
+      {/* Turn timer removed */}
 
       {/* Table felt */}
       <div className={`absolute rounded-[2rem] bg-gradient-to-br from-[#1a5c2a] to-[#0f3d1a] shadow-inner ${
