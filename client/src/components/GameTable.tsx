@@ -64,9 +64,6 @@ export const GameTable: React.FC<GameTableProps> = ({
   gameState, onPlayCard, onPlaceBid, onPassBid, onDeclareTrump, onSingCante, onDoneSinging, onNextRound,
   onLeaveRoom, reconnecting, connected
 }) => {
-  const [bidAmount, setBidAmount] = useState(70);
-
-
   const [showMenu, setShowMenu] = useState(false);
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
@@ -154,13 +151,6 @@ export const GameTable: React.FC<GameTableProps> = ({
       setSelectedCardId(null);
     }
   }, [isMyTurn, selectedCardId, selectedCard]);
-
-  // Keep bidAmount synced with minBid
-  useEffect(() => {
-    if (validActions.minBid > bidAmount) {
-      setBidAmount(validActions.minBid);
-    }
-  }, [validActions.minBid]);
 
   const sortedHand = handOrder
     .map(id => gameState.myHand.find(c => c.id === id))
@@ -372,38 +362,61 @@ export const GameTable: React.FC<GameTableProps> = ({
   const renderBiddingPanel = () => {
     if (gameState.phase !== GamePhase.BIDDING || !isMyTurn) return null;
 
+    const minBid = validActions.minBid;
+    // All possible bid values from 70 to 220 in steps of 10
+    const allBids = Array.from({ length: 16 }, (_, i) => 70 + i * 10);
+
     return (
       <div className="absolute left-1/2 -translate-x-1/2 z-30 animate-slideUpBottom"
-        style={{ bottom: isMobile ? '190px' : '250px', width: isMobile ? 'calc(100% - 16px)' : '400px' }}>
-        <div className="bg-[#16213e]/95 backdrop-blur-md rounded-xl px-3 py-2.5 shadow-2xl border border-[#4a5a7e]/60 flex items-center gap-2" dir="ltr">
-          {/* Pass button */}
-          <button onClick={onPassBid}
-            className="px-3 py-2 bg-gray-600/80 hover:bg-gray-500 text-white font-bold rounded-lg transition-colors text-xs whitespace-nowrap">
-            עבור
-          </button>
+        style={{ bottom: isMobile ? '180px' : '240px', width: isMobile ? 'calc(100% - 16px)' : '420px' }}>
+        <div className="bg-[#16213e]/95 backdrop-blur-md rounded-2xl shadow-2xl border border-[#4a5a7e]/60 overflow-hidden">
 
-          {/* Bid controls: - amount + */}
-          <div className="flex items-center gap-1 flex-shrink-0">
-            <button onClick={() => setBidAmount(Math.max(validActions.minBid, bidAmount - 10))}
-              className="w-8 h-8 rounded-lg bg-[#2a3a5e] hover:bg-[#3a4a6e] text-white text-lg font-bold transition-colors flex items-center justify-center">−</button>
-            <div className="w-12 h-8 flex items-center justify-center text-lg font-bold text-yellow-400 bg-[#0a0a1a] rounded-lg border border-[#4a5a7e]">
-              {bidAmount}
-            </div>
-            <button onClick={() => setBidAmount(Math.min(220, bidAmount + 10))}
-              className="w-8 h-8 rounded-lg bg-[#2a3a5e] hover:bg-[#3a4a6e] text-white text-lg font-bold transition-colors flex items-center justify-center">+</button>
+          {/* Header: current bid status */}
+          <div className="px-4 py-2.5 bg-black/30 border-b border-[#4a5a7e]/40 flex items-center justify-between" dir="rtl">
+            <span className="text-gray-400 text-xs font-medium">תורך להציע</span>
+            {gameState.currentBidAmount > 0 ? (
+              <span className="text-yellow-400 text-sm font-bold">
+                נוכחי: {gameState.currentBidAmount} ({gameState.players[gameState.currentBidWinner!]?.name})
+              </span>
+            ) : (
+              <span className="text-gray-500 text-xs">אין הצעות עדיין</span>
+            )}
           </div>
 
-          {/* Buy button */}
-          <button onClick={() => { onPlaceBid(bidAmount); setBidAmount(Math.max(70, bidAmount + 10)); }}
-            className="flex-1 py-2 bg-yellow-500 hover:bg-yellow-400 text-black font-bold rounded-lg transition-colors text-xs whitespace-nowrap">
-            קנה ({bidAmount})
-          </button>
+          {/* Bid grid */}
+          <div className="p-3">
+            <div className={`grid gap-1.5 ${isMobile ? 'grid-cols-4' : 'grid-cols-5'}`}>
+              {allBids.map(val => {
+                const isDisabled = val < minBid;
+                return (
+                  <button
+                    key={val}
+                    onClick={() => !isDisabled && onPlaceBid(val)}
+                    disabled={isDisabled}
+                    className={`py-2 rounded-lg font-bold text-sm transition-all ${
+                      isDisabled
+                        ? 'bg-gray-800/40 text-gray-600 cursor-not-allowed'
+                        : 'bg-[#2a3a5e] hover:bg-yellow-500 hover:text-black text-white active:scale-95'
+                    }`}
+                  >
+                    {val}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
 
-          {/* Capo button */}
-          <button onClick={() => onPlaceBid(230)}
-            className="px-2.5 py-2 bg-red-600 hover:bg-red-500 text-white font-bold rounded-lg transition-colors text-xs whitespace-nowrap">
-            קאפו!
-          </button>
+          {/* Bottom actions: Pass + Capo */}
+          <div className="px-3 pb-3 flex gap-2">
+            <button onClick={onPassBid}
+              className="flex-1 py-2.5 bg-gray-700/80 hover:bg-gray-600 text-white font-bold rounded-lg transition-colors text-sm active:scale-95">
+              עבור ❌
+            </button>
+            <button onClick={() => onPlaceBid(230)}
+              className="flex-1 py-2.5 bg-red-600 hover:bg-red-500 text-white font-bold rounded-lg transition-colors text-sm active:scale-95">
+              קאפו! 💥
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -1106,14 +1119,15 @@ export const GameTable: React.FC<GameTableProps> = ({
         </div>
       )}
 
-      {/* My name */}
-      <div className="absolute bottom-32 left-1/2 -translate-x-1/2 z-20">
+      {/* My name - positioned at the table edge, above card hand */}
+      <div className="absolute left-1/2 -translate-x-1/2 z-20"
+        style={{ bottom: isMobile ? '195px' : '255px' }}>
         {gameState.players[gameState.mySeat] && (
-          <div className={`relative px-3 py-1 rounded-lg text-sm font-medium border-2 ${
-            isMyTurn ? 'bg-yellow-600/30 border-yellow-500 text-yellow-300' : 'bg-[#1a2a4e]/80 border-blue-500 text-gray-300'
+          <div className={`relative px-3 py-1 rounded-lg text-xs font-medium border ${
+            isMyTurn ? 'bg-yellow-600/30 border-yellow-500 text-yellow-300' : 'bg-[#1a2a4e]/80 border-gray-600 text-gray-400'
           }`}>
             {gameState.players[gameState.mySeat]!.avatar && <span className="mr-1">{gameState.players[gameState.mySeat]!.avatar}</span>}
-            {gameState.players[gameState.mySeat]!.name} (אתה)
+            {gameState.players[gameState.mySeat]!.name}
             {isMyTurn && renderTurnTimer()}
           </div>
         )}
