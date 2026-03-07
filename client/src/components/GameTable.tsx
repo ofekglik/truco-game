@@ -146,8 +146,11 @@ export const GameTable: React.FC<GameTableProps> = ({
     }
   }, [gameState.currentBidAmount, gameState.phase]);
 
+  // Re-sort hand whenever a new round starts (roundNumber changes) or hand is empty
+  const prevRoundRef = useRef(gameState.roundNumber);
   useEffect(() => {
-    if (handOrder.length === 0 || gameState.roundNumber > (lastCompletedTricksLength > gameState.completedTricks.length ? gameState.roundNumber : -1)) {
+    if (handOrder.length === 0 || gameState.roundNumber !== prevRoundRef.current) {
+      prevRoundRef.current = gameState.roundNumber;
       const suitOrder = [Suit.ESPADAS, Suit.COPAS, Suit.OROS, Suit.BASTOS];
       const defaultOrder = [...gameState.myHand].sort((a, b) => {
         const suitDiff = suitOrder.indexOf(a.suit) - suitOrder.indexOf(b.suit);
@@ -155,6 +158,7 @@ export const GameTable: React.FC<GameTableProps> = ({
         return CARD_POWER[b.rank] - CARD_POWER[a.rank]; // high power → low: 1,3,12,11,10,7,6,5,4,2
       }).map(c => c.id);
       setHandOrder(defaultOrder);
+      setLastCompletedTricksLength(0);
     }
   }, [gameState.roundNumber, gameState.myHand.length]);
 
