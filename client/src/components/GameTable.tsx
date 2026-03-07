@@ -1349,18 +1349,21 @@ export const GameTable: React.FC<GameTableProps> = ({
         <div className="absolute bottom-1 left-0 right-0 z-20" style={{ height: windowHeight < windowWidth ? '120px' : '140px' }}>
           <div
             ref={handScrollRef}
-            className="flex items-end gap-1 px-2 h-full overflow-x-auto hide-scrollbar"
-            style={{ scrollSnapType: 'x mandatory' }}
+            className={`flex items-end gap-1 px-2 h-full hide-scrollbar ${
+              draggingCardId ? 'overflow-x-hidden' : 'overflow-x-auto'
+            }`}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
           >
             {sortedHand.map((card, i) => {
               const isPlayable = validActions.playableCards.includes(card.id);
               const isSelected = selectedCardId === card.id;
+              const isDragging = draggingCardId === card.id;
               return (
                 <div
                   key={card.id}
-                  className="flex-shrink-0 transition-transform duration-150"
+                  className={`flex-shrink-0 transition-transform duration-150 ${isDragging ? 'opacity-50 scale-105' : ''}`}
                   style={{
-                    scrollSnapAlign: 'center',
                     transform: isSelected ? 'translateY(-16px)' : 'translateY(0)',
                     zIndex: isSelected ? 100 : i,
                   }}
