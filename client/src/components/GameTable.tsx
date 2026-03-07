@@ -1193,34 +1193,27 @@ export const GameTable: React.FC<GameTableProps> = ({
             ))}
           </div>
 
-          {/* Mobile: Trump + bid info — positioned below top bar, not overlapping players */}
+          {/* Mobile: Trump + bid info — centered on board, slight opacity */}
           {gameState.trumpSuit && (
-            <div className="absolute top-8 left-1 z-20">
-              <div className="rounded-lg px-2.5 py-1.5 backdrop-blur-sm border-2 shadow-lg flex items-center gap-1.5"
-                style={{
-                  backgroundColor: `${SUIT_COLORS[gameState.trumpSuit]}22`,
-                  borderColor: SUIT_COLORS[gameState.trumpSuit],
-                  boxShadow: `0 0 12px ${SUIT_COLORS[gameState.trumpSuit]}66`,
-                }}>
-                <span className="text-lg" style={{ color: SUIT_COLORS[gameState.trumpSuit] }}>
+            <div className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none">
+              <div className="flex flex-col items-center gap-0.5 opacity-40">
+                <span className="text-3xl" style={{ color: SUIT_COLORS[gameState.trumpSuit] }}>
                   {SUIT_SYMBOLS[gameState.trumpSuit]}
                 </span>
-                <div className="flex flex-col leading-tight">
-                  <span className="text-[10px] font-bold" style={{ color: SUIT_COLORS[gameState.trumpSuit] }}>
-                    {SUIT_NAMES_HE[gameState.trumpSuit]}
+                <span className="text-xs font-bold" style={{ color: SUIT_COLORS[gameState.trumpSuit] }}>
+                  {SUIT_NAMES_HE[gameState.trumpSuit]}
+                </span>
+                {gameState.currentBidWinner && gameState.players[gameState.currentBidWinner] && (
+                  <span className="text-[10px] text-gray-300">
+                    {gameState.players[gameState.currentBidWinner]!.name} • {gameState.currentBidAmount}
                   </span>
-                  {gameState.currentBidWinner && gameState.players[gameState.currentBidWinner] && (
-                    <span className="text-[8px] text-gray-300">
-                      {gameState.players[gameState.currentBidWinner]!.name} • {gameState.currentBidAmount}
-                    </span>
-                  )}
-                </div>
+                )}
               </div>
             </div>
           )}
 
           {/* Mobile message bar */}
-          <div className="absolute top-8 right-10 z-20" style={{ left: gameState.trumpSuit ? '110px' : '8px' }}>
+          <div className="absolute top-8 right-10 left-2 z-20">
             <div className={`px-3 py-1.5 rounded-md text-xs font-medium backdrop-blur-sm truncate ${
               isMyTurn ? 'bg-yellow-600/80 text-black' : 'bg-black/60 text-gray-200'
             }`}>
@@ -1241,34 +1234,21 @@ export const GameTable: React.FC<GameTableProps> = ({
             <span className="text-red-400">{gameState.team2TricksWon}</span>
           </div>
 
-          {/* Desktop: Trump badge — top-right corner, away from players */}
+          {/* Desktop: Trump + bid info — centered on board, slight opacity */}
           {gameState.trumpSuit && (
-            <div className="absolute top-3 right-16 z-20">
-              <div
-                className="rounded-xl px-4 py-2.5 backdrop-blur-md border-2 shadow-lg transition-all"
-                style={{
-                  backgroundColor: `${SUIT_COLORS[gameState.trumpSuit]}22`,
-                  borderColor: SUIT_COLORS[gameState.trumpSuit],
-                  boxShadow: `0 0 20px ${SUIT_COLORS[gameState.trumpSuit]}88`,
-                }}
-              >
-                <div className="flex items-center gap-2">
-                  <span className="text-2xl">{SUIT_SYMBOLS[gameState.trumpSuit]}</span>
-                  <div className="flex flex-col">
-                    <span className="text-xs text-gray-400">אטו</span>
-                    <span className="text-sm font-bold" style={{ color: SUIT_COLORS[gameState.trumpSuit] }}>
-                      {SUIT_NAMES_HE[gameState.trumpSuit]}
-                    </span>
-                  </div>
-                  {gameState.currentBidWinner && gameState.players[gameState.currentBidWinner] && (
-                    <div className="border-l border-gray-600 pl-2 ml-1 flex flex-col">
-                      <span className="text-[10px] text-gray-400">
-                        {gameState.players[gameState.currentBidWinner]!.avatar} {gameState.players[gameState.currentBidWinner]!.name}
-                      </span>
-                      <span className="text-xs font-bold text-yellow-400">{gameState.currentBidAmount}</span>
-                    </div>
-                  )}
-                </div>
+            <div className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none">
+              <div className="flex flex-col items-center gap-1 opacity-35">
+                <span className="text-5xl" style={{ color: SUIT_COLORS[gameState.trumpSuit] }}>
+                  {SUIT_SYMBOLS[gameState.trumpSuit]}
+                </span>
+                <span className="text-sm font-bold" style={{ color: SUIT_COLORS[gameState.trumpSuit] }}>
+                  {SUIT_NAMES_HE[gameState.trumpSuit]}
+                </span>
+                {gameState.currentBidWinner && gameState.players[gameState.currentBidWinner] && (
+                  <span className="text-xs text-gray-300">
+                    {gameState.players[gameState.currentBidWinner]!.name} • {gameState.currentBidAmount}
+                  </span>
+                )}
               </div>
             </div>
           )}
