@@ -129,7 +129,7 @@ export const GameGuide: React.FC<GameGuideProps> = ({ onClose }) => {
               <span>10 = <strong className="text-white">2</strong></span>
               <span>שאר = <strong className="text-white">0</strong></span>
             </div>
-            <p className="text-gray-500 text-[10px] text-center mt-1">סה״כ 120 נקודות בחפיסה</p>
+            <p className="text-gray-500 text-[10px] text-center mt-1">סה״כ 120 נק׳ בקלפים + 10 בונוס ללקיחה אחרונה = <strong className="text-gray-400">130</strong></p>
           </div>
         </div>
       ),
@@ -156,6 +156,9 @@ export const GameGuide: React.FC<GameGuideProps> = ({ onClose }) => {
             </p>
             <p className="text-gray-300 text-xs leading-relaxed">
               🔹 קלף <strong className="text-yellow-400">אטו</strong> מנצח כל סוג אחר.
+            </p>
+            <p className="text-gray-300 text-xs leading-relaxed">
+              🔹 הלקיחה <strong className="text-yellow-400">האחרונה</strong> (10) שווה <strong>+10 נקודות בונוס</strong>!
             </p>
           </div>
           {/* Example trick */}
@@ -196,7 +199,7 @@ export const GameGuide: React.FC<GameGuideProps> = ({ onClose }) => {
           <div className="bg-gray-800/60 rounded-xl p-3">
             <p className="text-yellow-400 text-xs font-bold text-center mb-2">חישוב הסיבוב:</p>
             <p className="text-gray-300 text-xs leading-relaxed">
-              🔹 נקודות קלפים (מתוך 120) + נקודות שירה
+              🔹 נקודות קלפים (מתוך 120) + <strong className="text-yellow-400">10 בונוס</strong> ללקיחה אחרונה + שירה = עד 130+
             </p>
             <p className="text-gray-300 text-xs leading-relaxed">
               🔹 הקבוצה <strong>הקונה</strong> חייבת להגיע למספר שקנתה (לפחות)
