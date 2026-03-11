@@ -152,6 +152,9 @@ export const GameGuide: React.FC<GameGuideProps> = ({ onClose }) => {
               🔹 אם אין לך מאותו סוג — <strong>חובה</strong> לשחק אטו (אם יש).
             </p>
             <p className="text-gray-300 text-xs leading-relaxed">
+              🔹 אם כבר שוחק אטו — <strong>חובה</strong> לשחק אטו <strong className="text-yellow-400">גבוה יותר</strong>. אם אין — שחק כל קלף.
+            </p>
+            <p className="text-gray-300 text-xs leading-relaxed">
               🔹 אם אין לך גם אטו — שחק כל קלף.
             </p>
             <p className="text-gray-300 text-xs leading-relaxed">
