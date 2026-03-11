@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { RoomSummary } from '../types';
+import { GameGuide } from './GameGuide';
 
 interface LobbyProps {
   onCreateRoom: (name: string, targetScore?: number, avatar?: string, password?: string) => void;
@@ -23,6 +24,7 @@ export const Lobby: React.FC<LobbyProps> = ({
   const [passwordRoomCode, setPasswordRoomCode] = useState<string | null>(null);
   const [joinPassword, setJoinPassword] = useState('');
   const passwordInputRef = useRef<HTMLInputElement>(null);
+  const [showGuide, setShowGuide] = useState(false);
 
   // Fetch rooms on mount and periodically as fallback (real-time via socket is primary)
   useEffect(() => {
@@ -114,6 +116,15 @@ export const Lobby: React.FC<LobbyProps> = ({
             <span className="text-gray-300 font-semibold text-sm max-w-[80px] truncate">{profile.nickname}</span>
           </button>
         )}
+
+        {/* How to play button */}
+        <button
+          onClick={() => setShowGuide(true)}
+          className="flex items-center gap-1 px-3 py-1.5 bg-blue-500/15 hover:bg-blue-500/30 border border-blue-500/40 rounded-xl transition-all text-blue-300 text-sm font-medium"
+        >
+          <span>?</span>
+          <span className="hidden sm:inline">איך משחקים</span>
+        </button>
 
         {/* Create Room Button (left side in RTL) */}
         <button
@@ -339,6 +350,9 @@ export const Lobby: React.FC<LobbyProps> = ({
       <div className="px-4 py-2 border-t border-gray-800/50 text-center">
         <p className="text-gray-600 text-[10px]">אטו • משחק קלפים קלאסי</p>
       </div>
+
+      {/* Game Guide overlay */}
+      {showGuide && <GameGuide onClose={() => setShowGuide(false)} />}
 
       <style>{`
         input[type="range"]::-webkit-slider-thumb {
