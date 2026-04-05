@@ -126,12 +126,20 @@ function AppContent() {
     );
   }
 
-  // Loading
+  // Reconnecting to room or loading
   return (
     <div className="min-h-screen flex items-center justify-center bg-[#0d1117]">
       <div className="text-center">
         <div className="text-4xl mb-4 animate-spin">🃏</div>
-        <p className="text-gray-400">טוען...</p>
+        <p className="text-gray-400">{roomInfo ? 'מתחבר חזרה למשחק...' : 'טוען...'}</p>
+        {roomInfo && (
+          <button
+            onClick={() => leaveRoom()}
+            className="mt-4 px-4 py-2 text-sm text-gray-500 hover:text-gray-300 underline transition-colors"
+          >
+            חזרה ללובי
+          </button>
+        )}
       </div>
     </div>
   );

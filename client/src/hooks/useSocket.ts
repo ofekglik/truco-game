@@ -13,15 +13,15 @@ const ROOM_STORAGE_KEY = 'ato_room_info';
 
 function saveRoomInfo(info: RoomInfo | null) {
   if (info) {
-    sessionStorage.setItem(ROOM_STORAGE_KEY, JSON.stringify(info));
+    localStorage.setItem(ROOM_STORAGE_KEY, JSON.stringify(info));
   } else {
-    sessionStorage.removeItem(ROOM_STORAGE_KEY);
+    localStorage.removeItem(ROOM_STORAGE_KEY);
   }
 }
 
 function loadRoomInfo(): RoomInfo | null {
   try {
-    const stored = sessionStorage.getItem(ROOM_STORAGE_KEY);
+    const stored = localStorage.getItem(ROOM_STORAGE_KEY);
     return stored ? JSON.parse(stored) : null;
   } catch {
     return null;
@@ -31,6 +31,7 @@ function loadRoomInfo(): RoomInfo | null {
 export function useSocket() {
   const socketRef = useRef<Socket | null>(null);
   const roomInfoRef = useRef<RoomInfo | null>(loadRoomInfo());
+  const gameStateRef = useRef<ClientGameState | null>(null);
   const [connected, setConnected] = useState(false);
   const [reconnecting, setReconnecting] = useState(false);
   const [gameState, setGameState] = useState<ClientGameState | null>(null);
@@ -85,6 +86,7 @@ export function useSocket() {
       });
       socket.on('gameState', (state: ClientGameState) => {
         if (state && typeof state === 'object' && state.phase !== undefined) {
+          gameStateRef.current = state;
           setGameState(state);
         } else {
           console.error('[socket] Invalid gameState received:', state);
@@ -100,8 +102,8 @@ export function useSocket() {
       });
       socket.on('roomError', (msg: string) => {
         setError(msg);
-        // If rejoin failed (room no longer exists), clear stored info
-        if (roomInfoRef.current) {
+        // If we were trying to rejoin (have stored info but no active game), clear it
+        if (roomInfoRef.current && !gameStateRef.current) {
           console.log('[socket] rejoin failed, clearing stored room info');
           roomInfoRef.current = null;
           setRoomInfo(null);
