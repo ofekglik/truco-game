@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import express from 'express';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
@@ -13,7 +14,8 @@ import {
 import { GamePhase, SEAT_ORDER, SeatPosition, Suit } from './engine/types.js';
 import { supabase, isSupabaseConfigured } from './lib/supabase.js';
 import { recordGameResults } from './lib/gameRecorder.js';
-import { addBotsToRoom, isBotSeat, executeBotTurn, executeBotSingingChoice, removeBotsFromRoom } from './bot/botPlayer.js';
+import { addBotsToRoom, isBotSeat, isLegendaryBotSeat, executeBotTurn, executeLegendaryBotTurn, executeBotSingingChoice, removeBotsFromRoom, roomHasLegendaryBots } from './bot/botPlayer.js';
+import { validateLegendaryPassword, isLegendaryEnabled, getRoomCost, resetRoomCost } from './bot/legendaryBot.js';
 
 const app = express();
 app.use(cors());
@@ -41,14 +43,38 @@ app.get('/health', (_req, res) => res.json({ status: 'ok' }));
 // Bot API — add bots to a room for local testing
 app.use(express.json());
 app.post('/api/bots', (req, res) => {
-  const { roomCode } = req.body;
+  const { roomCode, difficulty, password } = req.body;
   if (!roomCode) return res.status(400).json({ error: 'roomCode required' });
   const room = getRoomByCode(roomCode);
   if (!room) return res.status(404).json({ error: 'Room not found' });
-  const bots = addBotsToRoom(room);
+
+  // Handle legendary difficulty — requires password and API key
+  if (difficulty === 'legendary') {
+    if (!isLegendaryEnabled()) {
+      return res.status(403).json({ error: 'Legendary bots are not available on this server' });
+    }
+    if (!password || !validateLegendaryPassword(password)) {
+      return res.status(401).json({ error: 'Invalid password for legendary bots' });
+    }
+    const bots = addBotsToRoom(room, 'legendary');
+    resetRoomCost(room.code);
+    broadcastState(room);
+    broadcastRoomsList();
+    return res.json({ added: bots.length, difficulty: 'legendary', bots: bots.map(b => ({ seat: b.seat, name: b.name })) });
+  }
+
+  const validDifficulties = ['easy', 'medium', 'hard'];
+  const botDifficulty = validDifficulties.includes(difficulty) ? difficulty : 'medium';
+  const bots = addBotsToRoom(room, botDifficulty);
   broadcastState(room);
   broadcastRoomsList();
-  res.json({ added: bots.length, bots: bots.map(b => ({ seat: b.seat, name: b.name })) });
+  res.json({ added: bots.length, difficulty: botDifficulty, bots: bots.map(b => ({ seat: b.seat, name: b.name })) });
+});
+
+// Cost tracking endpoint — returns current room's LLM cost
+app.get('/api/bots/cost/:roomCode', (req, res) => {
+  const cost = getRoomCost(req.params.roomCode);
+  res.json(cost);
 });
 
 const httpServer = createServer(app);
@@ -193,6 +219,12 @@ function scheduleBotTurn(room: Room) {
   // Trick pending resolution — wait for centralized timer to resolve it
   if (state.trickPendingResolution) return;
 
+  // Legendary bots take async path
+  if (isLegendaryBotSeat(room.code, state.currentTurnSeat)) {
+    scheduleLegendaryBotTurn(room);
+    return;
+  }
+
   const delay = state.phase === GamePhase.TRICK_PLAY ? 800 : 500;
   setTimeout(() => {
     // Re-check: another event may have changed the state
@@ -211,6 +243,58 @@ function scheduleBotTurn(room: Room) {
       }
     }
   }, delay);
+}
+
+// Schedule legendary bot turn — async (LLM API call)
+function scheduleLegendaryBotTurn(room: Room) {
+  const state = room.state;
+  const delay = state.phase === GamePhase.TRICK_PLAY ? 800 : 500;
+
+  setTimeout(async () => {
+    // Re-check: another event may have changed the state
+    if (!isLegendaryBotSeat(room.code, state.currentTurnSeat)) return;
+    if (state.trickPendingResolution) return;
+
+    try {
+      const acted = await executeLegendaryBotTurn(room);
+      if (acted) {
+        // Emit cost update to room
+        emitCostUpdate(room);
+
+        if (state.trickPendingResolution) {
+          broadcastState(room, false);
+          scheduleTrickResolution(room);
+        } else {
+          broadcastState(room, false);
+          scheduleBotTurn(room);
+        }
+      }
+    } catch (err) {
+      console.error('[legendary] Error in bot turn:', err);
+      // Fallback: treat as hard bot for this turn
+      const acted = executeBotTurn(room);
+      if (acted) {
+        if (state.trickPendingResolution) {
+          broadcastState(room, false);
+          scheduleTrickResolution(room);
+        } else {
+          broadcastState(room, false);
+          scheduleBotTurn(room);
+        }
+      }
+    }
+  }, delay);
+}
+
+// Emit cost update to all connected players in a room
+function emitCostUpdate(room: Room) {
+  const cost = getRoomCost(room.code);
+  for (const seat of SEAT_ORDER) {
+    const socketId = room.seatToSocket.get(seat);
+    if (socketId) {
+      io.to(socketId).emit('legendaryBotCost', cost);
+    }
+  }
 }
 
 io.on('connection', (socket) => {

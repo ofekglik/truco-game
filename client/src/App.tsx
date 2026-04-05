@@ -16,7 +16,7 @@ function AppContent() {
     roomsList, fetchRoomsList,
     createRoom, joinRoom, startGame,
     placeBid, passBid, declareTrump, singCante, doneSinging, chooseSinger, playCard, nextRound,
-    swapSeat, updateSettings, leaveRoom,
+    swapSeat, updateSettings, leaveRoom, legendaryBotCost,
   } = useSocket();
 
   const [showProfile, setShowProfile] = useState(false);
@@ -122,6 +122,7 @@ function AppContent() {
         onLeaveRoom={leaveRoom}
         reconnecting={reconnecting}
         connected={connected}
+        legendaryBotCost={legendaryBotCost}
       />
     );
   }

@@ -1,24 +1,52 @@
 /**
  * Bot Player System
  * Creates virtual players that auto-join rooms and play valid moves.
- * Activated via /api/bots?room=CODE or when DEV_MODE=true.
+ * Uses strategy.ts for difficulty-based decision making.
+ * Uses legendaryBot.ts for LLM-powered legendary difficulty.
  */
 
 import { GameState, GamePhase, SeatPosition, SEAT_ORDER, SEAT_TEAM, Suit } from '../engine/types.js';
 import {
   placeBid, declareTrump, singCante, doneSinging, chooseSinger, playCard, nextRound
 } from '../engine/game.js';
-import { getValidPlays } from '../engine/tricks.js';
-import { getSingableSuits } from '../engine/singing.js';
 import { Room } from '../rooms/roomManager.js';
+import {
+  BotDifficulty,
+  chooseBid,
+  chooseTrump,
+  chooseSinging,
+  chooseSingerChoice,
+  chooseCard
+} from './strategy.js';
+import {
+  legendaryChooseBid,
+  legendaryChooseTrump,
+  legendaryChooseSinging,
+  legendaryChooseSingerChoice,
+  legendaryChooseCard,
+} from './legendaryBot.js';
 
-const BOT_NAMES = ['בוט אלפא', 'בוט בטא', 'בוט גמא'];
-const BOT_AVATARS = ['🤖', '🦾', '🧠'];
+export type FullBotDifficulty = BotDifficulty | 'legendary';
 
-interface BotInstance {
+const BOT_NAMES: Record<FullBotDifficulty, string[]> = {
+  easy: ['בוט קל 🟢', 'בוט קל 🌱', 'בוט קל 🍀'],
+  medium: ['בוט בינוני 🟡', 'בוט בינוני ⚡', 'בוט בינוני 🔥'],
+  hard: ['בוט קשה 🔴', 'בוט קשה 🧠', 'בוט קשה 💀'],
+  legendary: ['בוט אגדי 🌟', 'בוט אגדי 👑', 'בוט אגדי 💎'],
+};
+
+const BOT_AVATARS: Record<FullBotDifficulty, string[]> = {
+  easy: ['🤖', '🦾', '🧩'],
+  medium: ['🤖', '🦾', '🧩'],
+  hard: ['🤖', '🦾', '🧩'],
+  legendary: ['🌟', '👑', '💎'],
+};
+
+export interface BotInstance {
   seat: SeatPosition;
   name: string;
   avatar: string;
+  difficulty: FullBotDifficulty;
 }
 
 const roomBots = new Map<string, BotInstance[]>();
@@ -27,16 +55,19 @@ const roomBots = new Map<string, BotInstance[]>();
  * Add bot players to fill empty seats in a room.
  * Returns the bots that were added.
  */
-export function addBotsToRoom(room: Room): BotInstance[] {
+export function addBotsToRoom(room: Room, difficulty: FullBotDifficulty = 'medium'): BotInstance[] {
   const bots: BotInstance[] = [];
   let botIdx = 0;
+  const names = BOT_NAMES[difficulty];
+  const avatars = BOT_AVATARS[difficulty];
 
   for (const seat of SEAT_ORDER) {
-    if (!room.state.players[seat] && botIdx < BOT_NAMES.length) {
+    if (!room.state.players[seat] && botIdx < names.length) {
       const bot: BotInstance = {
         seat,
-        name: BOT_NAMES[botIdx],
-        avatar: BOT_AVATARS[botIdx],
+        name: names[botIdx],
+        avatar: avatars[botIdx],
+        difficulty,
       };
 
       room.state.players[seat] = {
@@ -58,7 +89,9 @@ export function addBotsToRoom(room: Room): BotInstance[] {
     }
   }
 
-  roomBots.set(room.code, bots);
+  // Merge with any existing bots (in case some seats were already filled)
+  const existing = roomBots.get(room.code) || [];
+  roomBots.set(room.code, [...existing, ...bots]);
   return bots;
 }
 
@@ -72,7 +105,36 @@ export function isBotSeat(roomCode: string, seat: SeatPosition): boolean {
 }
 
 /**
- * Execute bot turn if it's a bot's turn.
+ * Check if a seat is a legendary bot
+ */
+export function isLegendaryBotSeat(roomCode: string, seat: SeatPosition): boolean {
+  const bots = roomBots.get(roomCode);
+  if (!bots) return false;
+  const bot = bots.find(b => b.seat === seat);
+  return bot?.difficulty === 'legendary';
+}
+
+/**
+ * Get the difficulty of a bot at a given seat
+ */
+function getBotDifficulty(roomCode: string, seat: SeatPosition): FullBotDifficulty {
+  const bots = roomBots.get(roomCode);
+  if (!bots) return 'medium';
+  const bot = bots.find(b => b.seat === seat);
+  return bot?.difficulty || 'medium';
+}
+
+/**
+ * Check if room has any legendary bots
+ */
+export function roomHasLegendaryBots(roomCode: string): boolean {
+  const bots = roomBots.get(roomCode);
+  if (!bots) return false;
+  return bots.some(b => b.difficulty === 'legendary');
+}
+
+/**
+ * Execute bot turn (sync — for non-legendary bots).
  * Returns true if a bot acted (caller should broadcast state).
  */
 export function executeBotTurn(room: Room): boolean {
@@ -81,24 +143,83 @@ export function executeBotTurn(room: Room): boolean {
 
   if (!isBotSeat(room.code, currentSeat)) return false;
 
+  // Legendary bots use the async path
+  if (isLegendaryBotSeat(room.code, currentSeat)) return false;
+
+  const player = state.players[currentSeat];
+  if (!player) return false;
+
+  const difficulty = getBotDifficulty(room.code, currentSeat) as BotDifficulty;
+
+  switch (state.phase) {
+    case GamePhase.BIDDING:
+      return botBid(state, currentSeat, difficulty);
+
+    case GamePhase.TRUMP_DECLARATION:
+      return botDeclareTrump(state, currentSeat, difficulty);
+
+    case GamePhase.SINGING:
+      return botSing(state, currentSeat, difficulty);
+
+    case GamePhase.TRICK_PLAY:
+      return botPlayCard(state, currentSeat, difficulty);
+
+    case GamePhase.ROUND_SCORING:
+      nextRound(state);
+      return true;
+
+    default:
+      return false;
+  }
+}
+
+/**
+ * Execute legendary bot turn (async — calls LLM API).
+ * Returns true if a bot acted.
+ */
+export async function executeLegendaryBotTurn(room: Room): Promise<boolean> {
+  const state = room.state;
+  const currentSeat = state.currentTurnSeat;
+
+  if (!isLegendaryBotSeat(room.code, currentSeat)) return false;
+
   const player = state.players[currentSeat];
   if (!player) return false;
 
   switch (state.phase) {
-    case GamePhase.BIDDING:
-      return botBid(state, currentSeat);
+    case GamePhase.BIDDING: {
+      const amount = await legendaryChooseBid(state, currentSeat, room.code);
+      placeBid(state, currentSeat, amount);
+      return true;
+    }
 
-    case GamePhase.TRUMP_DECLARATION:
-      return botDeclareTrump(state, currentSeat);
+    case GamePhase.TRUMP_DECLARATION: {
+      const suit = await legendaryChooseTrump(state, currentSeat, room.code);
+      declareTrump(state, currentSeat, suit);
+      return true;
+    }
 
-    case GamePhase.SINGING:
-      return botSing(state, currentSeat, room.code);
+    case GamePhase.SINGING: {
+      const suit = await legendaryChooseSinging(state, currentSeat, room.code);
+      if (suit) {
+        singCante(state, currentSeat, suit);
+      } else {
+        doneSinging(state, currentSeat);
+      }
+      return true;
+    }
 
-    case GamePhase.TRICK_PLAY:
-      return botPlayCard(state, currentSeat);
+    case GamePhase.TRICK_PLAY: {
+      const card = await legendaryChooseCard(state, currentSeat, room.code);
+      if (!card) {
+        console.log(`[legendary] WARNING: No valid card for ${currentSeat}`);
+        return false;
+      }
+      playCard(state, currentSeat, card.id);
+      return true;
+    }
 
     case GamePhase.ROUND_SCORING:
-      // Auto-advance to next round (use nextRound for proper dealer rotation)
       nextRound(state);
       return true;
 
@@ -117,90 +238,46 @@ export function executeBotSingingChoice(room: Room): boolean {
   const buyer = state.currentBidWinner;
   if (!buyer || !isBotSeat(room.code, buyer)) return false;
 
-  // Bot always chooses to sing itself
-  chooseSinger(state, buyer, 'self');
+  const difficulty = getBotDifficulty(room.code, buyer);
+  if (difficulty === 'legendary') {
+    // For legendary, still use hard heuristic (fast, no API call needed)
+    const choice = chooseSingerChoice(state, buyer, 'hard');
+    chooseSinger(state, buyer, choice);
+  } else {
+    const choice = chooseSingerChoice(state, buyer, difficulty as BotDifficulty);
+    chooseSinger(state, buyer, choice);
+  }
   return true;
 }
 
-function botBid(state: GameState, seat: SeatPosition): boolean {
-  // Simple strategy: bid if hand looks strong, else pass
-  const player = state.players[seat];
-  if (!player) return false;
-  const hand = player.hand;
-
-  // Count high cards (aces and 3s)
-  const highCards = hand.filter(c => c.rank === 1 || c.rank === 3).length;
-
-  // Bid if we have 3+ high cards and current bid is low
-  if (highCards >= 3 && state.currentBidAmount < 90) {
-    const bidAmount = Math.max(state.currentBidAmount + 10, 70);
-    if (bidAmount <= 100) {
-      placeBid(state, seat, bidAmount);
-      return true;
-    }
-  }
-
-  // Otherwise pass
-  placeBid(state, seat, 0);
+function botBid(state: GameState, seat: SeatPosition, difficulty: BotDifficulty): boolean {
+  const amount = chooseBid(state, seat, difficulty);
+  placeBid(state, seat, amount);
   return true;
 }
 
-function botDeclareTrump(state: GameState, seat: SeatPosition): boolean {
-  const player = state.players[seat];
-  if (!player) return false;
-  const hand = player.hand;
-
-  // Count cards per suit, pick the suit with most cards
-  const suitCounts: Record<string, number> = {};
-  for (const suit of Object.values(Suit)) {
-    suitCounts[suit] = hand.filter(c => c.suit === suit).length;
-  }
-
-  const bestSuit = Object.entries(suitCounts)
-    .sort((a, b) => b[1] - a[1])[0][0] as Suit;
-
-  declareTrump(state, seat, bestSuit);
+function botDeclareTrump(state: GameState, seat: SeatPosition, difficulty: BotDifficulty): boolean {
+  const suit = chooseTrump(state, seat, difficulty);
+  declareTrump(state, seat, suit);
   return true;
 }
 
-function botSing(state: GameState, seat: SeatPosition, roomCode: string): boolean {
-  const player = state.players[seat];
-  if (!player) return false;
-
-  // Check if we can sing
-  if (state.biddingTeam && SEAT_TEAM[seat] === state.biddingTeam) {
-    const singable = getSingableSuits(
-      player.hand,
-      state.trumpSuit!,
-      state.currentBidAmount,
-      state.cantes,
-      seat,
-      state.biddingTeam
-    );
-
-    if (singable.length > 0) {
-      singCante(state, seat, singable[0]);
-      return true;
-    }
+function botSing(state: GameState, seat: SeatPosition, difficulty: BotDifficulty): boolean {
+  const suit = chooseSinging(state, seat, difficulty);
+  if (suit) {
+    singCante(state, seat, suit);
+    return true;
   }
-
-  // Done singing
   doneSinging(state, seat);
   return true;
 }
 
-function botPlayCard(state: GameState, seat: SeatPosition): boolean {
-  const player = state.players[seat];
-  if (!player) return false;
-  const validPlays = getValidPlays(player.hand, state.currentTrick, state.trumpSuit);
-
-  if (validPlays.length === 0) {
-    console.log(`[bot] WARNING: No valid plays for ${seat}, hand has ${player.hand.length} cards`);
+function botPlayCard(state: GameState, seat: SeatPosition, difficulty: BotDifficulty): boolean {
+  const card = chooseCard(state, seat, difficulty);
+  if (!card) {
+    console.log(`[bot] WARNING: No valid card for ${seat}, hand has ${state.players[seat]?.hand.length} cards`);
     return false;
   }
-
-  // Pick a random valid card
-  const card = validPlays[Math.floor(Math.random() * validPlays.length)];
   playCard(state, seat, card.id);
   return true;
 }

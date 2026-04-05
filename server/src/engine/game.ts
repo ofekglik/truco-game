@@ -122,15 +122,19 @@ export function placeBid(state: GameState, seat: SeatPosition, amount: number): 
   if (!Number.isInteger(amount)) return state; // Must be integer
   if (amount !== 0 && amount < 70) return state;
   if (amount !== 0 && amount % 10 !== 0) return state; // Must be multiple of 10
-  if (amount !== 0 && amount <= state.currentBidAmount) return state;
+  if (amount !== 0 && amount < state.currentBidAmount) return state;
   if (amount > 230) return state;
 
   const bid: Bid = { seat, amount };
   state.bids.push(bid);
 
   if (amount > 0) {
-    state.currentBidAmount = amount;
-    state.currentBidWinner = seat;
+    // Only update bid winner if this is a HIGHER bid (first to bid highest wins)
+    if (amount > state.currentBidAmount || state.currentBidWinner === null) {
+      state.currentBidAmount = amount;
+      state.currentBidWinner = seat;
+    }
+    // If amount === currentBidAmount, it's a declaration bid — recorded but doesn't change winner
 
     if (amount === 230) {
       // Bid capo
@@ -728,7 +732,7 @@ function getValidActions(state: GameState, seat: SeatPosition): ValidActions {
   if (state.phase === GamePhase.BIDDING && state.currentTurnSeat === seat) {
     actions.canBid = true;
     actions.canPass = true;
-    actions.minBid = Math.max(70, state.currentBidAmount + 10); // increments of 10
+    actions.minBid = Math.max(70, state.currentBidAmount); // can match current bid (declaration) or go higher
     actions.canDeclareCapo = true;
   }
 
