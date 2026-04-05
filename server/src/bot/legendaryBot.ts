@@ -80,22 +80,37 @@ CARD POWER (weakest→strongest): 2,4,5,6,7,10,11,12,3,1
 TEAMS: south+north = team1, east+west = team2
 
 GAME FLOW:
-1. BIDDING: Players bid on how many points their team will score. Minimum bid is 70, increments of 10. Pass (0) to drop out. Last bidder wins.
-2. TRUMP DECLARATION: Bid winner declares trump suit.
-3. SINGING: Bidding team members declare "cante" (king+horse of same suit). Trump cante = 40pts, non-trump = 20pts.
-   - Bid 80: no trump singing allowed, max 20pts singing.
-   - Bid 90-99: max 40pts singing.
+1. BIDDING: Players bid how many points their team will score. Minimum bid 70, increments of 10, max 230 (capo).
+   - You can BID HIGHER than the current bid to become the new bid winner.
+   - You can MATCH the current bid as a "declaration" to signal your partner — this does NOT make you the bid winner; the first player to bid that amount keeps the lead.
+   - You can PASS (0) to drop out permanently for this round.
+   - Bidding continues until all but the bid winner have passed.
+2. TRUMP DECLARATION: The bid winner declares the trump suit.
+3. SINGING: The bid winner chooses who sings first (self or partner). Bidding team members declare "cante" if they hold king (12) + horse (11) of the same suit. Trump cante = 40pts, non-trump cante = 20pts.
+   - Bid exactly 80: no trump singing, max 20pts total (one non-trump cante only).
+   - Bid 90-99: max 40pts total singing (trump and non-trump allowed).
    - Bid 100+: no singing cap.
-4. TRICK PLAY: 10 tricks. Must follow lead suit. If can't follow, must play trump if possible. Must beat current highest card of led suit (overbeat rule). If trumping, must overtrump if possible.
-5. SCORING: Bidding team must reach their bid amount (trick points + singing points). If they fall short, opponents get ALL points (trick + singing + bid amount).
+   After singing is done, trick play begins.
+4. TRICK PLAY: 10 tricks of 4 cards each.
+   - MUST FOLLOW lead suit if you have cards of that suit.
+   - OVERBEAT RULE: If following suit, you must play a card that beats the current highest card of the lead suit — UNLESS trump has already been played in this trick, in which case you just follow suit without needing to beat.
+   - If you can't follow lead suit and have trump cards: you MUST play a trump card.
+   - OVERTRUMP RULE: If trump is already in the trick, you must play a HIGHER trump if possible. If you cannot beat the existing trump, you may play ANY card from your hand (free play).
+   - If you can't follow suit and have no trumps: play any card (free play).
+   - Last trick of the round awards a 10-point bonus to the winning team.
+5. SCORING: Only the bid amount matters for the score.
+   - If the bidding team's total (trick points + singing points) >= their bid: the bidding team scores the bid amount. The opposing team scores 0.
+   - If the bidding team falls short: the OPPOSING team scores the bid amount. The bidding team scores 0.
+   - Game continues until a team reaches the target score.
 
 STRATEGY TIPS:
-- Aces (rank 1) are strongest and worth 11pts each — leading with them is often safe.
+- Aces (rank 1) are the strongest card and worth 11pts — leading with them is often safe.
 - 3s (rank 3) are second strongest and worth 10pts — powerful follow-up to aces.
 - Voids (no cards in a suit) let you cut with trumps — very valuable.
-- When partner is winning, dump your lowest card.
-- When leading, lead from short non-trump suits to set up future cuts.
-- Count points to know if you're on track to make the bid.
+- When your partner is winning the trick, dump your lowest-value card to save strong cards.
+- When leading, lead aces from short non-trump suits first (cash points before opponents can cut).
+- Count points to know if your team is on track to make the bid.
+- Declaration bids (matching current bid) can signal to your partner that you have a strong hand at that level.
 
 You must respond with ONLY the requested action in the exact format specified. No explanations.`;
 
@@ -258,15 +273,19 @@ export async function legendaryChooseBid(
   try {
     const gameContext = serializeGameState(state, seat);
     const mcAnalysis = precomputeMCForBid(state, seat);
-    const minBid = Math.max(state.currentBidAmount + 10, 70);
+    const minBid = Math.max(state.currentBidAmount, 70);
+    const minHigherBid = Math.max(state.currentBidAmount + 10, 70);
 
     const userPrompt = `${gameContext}
 
 ${mcAnalysis}
 
 Current phase: BIDDING
-Minimum bid: ${minBid} (increments of 10, max 230)
-You can pass (respond with 0) or bid.
+Current highest bid: ${state.currentBidAmount} by ${state.currentBidWinner || 'nobody'}
+You can:
+- PASS (respond with 0)
+- BID ${state.currentBidAmount > 0 ? state.currentBidAmount : 70} to declare (match current bid, signals strength to partner but does NOT make you the winner)
+- BID ${minHigherBid}+ to become the new bid winner (increments of 10, max 230)
 
 Based on your hand strength, the Monte Carlo analysis, and the bidding history, what should you bid?
 Respond with ONLY a number (the bid amount, or 0 to pass).`;
