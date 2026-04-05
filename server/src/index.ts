@@ -574,7 +574,19 @@ io.on('connection', (socket) => {
     const result = leaveRoom(socket.id);
     if (result) {
       io.to(result.room.code).emit('playerLeft', { seat: result.seat });
-      broadcastState(result.room);
+
+      // If only bots remain, clean up the room
+      const humanPlayers = SEAT_ORDER.filter(s => {
+        const p = result.room.state.players[s];
+        return p !== null && !isBotSeat(result.room.code, s);
+      });
+      if (humanPlayers.length === 0) {
+        console.log(`[cleanup] Room ${result.room.code} has only bots left, removing`);
+        removeBotsFromRoom(result.room.code);
+        deleteRoom(result.room.code);
+      } else {
+        broadcastState(result.room);
+      }
     }
     socket.leave('*');
     broadcastRoomsList();
@@ -590,11 +602,23 @@ io.on('connection', (socket) => {
       const result = removePlayer(socket.id);
       if (result) {
         io.to(result.room.code).emit('playerLeft', { seat: result.seat });
-        broadcastState(result.room);
-        // Schedule room cleanup if all players disconnected
-        const connectedPlayers = SEAT_ORDER.filter(s => result.room.state.players[s]?.connected);
-        if (connectedPlayers.length === 0 && result.room.state.phase !== GamePhase.WAITING) {
-          scheduleRoomCleanup(result.room);
+
+        // Check if only bots remain (no connected humans)
+        const connectedHumans = SEAT_ORDER.filter(s => {
+          const p = result.room.state.players[s];
+          return p !== null && p.connected && !isBotSeat(result.room.code, s);
+        });
+        if (connectedHumans.length === 0) {
+          console.log(`[cleanup] Room ${result.room.code} has no connected humans, removing`);
+          removeBotsFromRoom(result.room.code);
+          deleteRoom(result.room.code);
+        } else {
+          broadcastState(result.room);
+          // Schedule room cleanup if all players disconnected
+          const connectedPlayers = SEAT_ORDER.filter(s => result.room.state.players[s]?.connected);
+          if (connectedPlayers.length === 0 && result.room.state.phase !== GamePhase.WAITING) {
+            scheduleRoomCleanup(result.room);
+          }
         }
       }
       broadcastRoomsList();
