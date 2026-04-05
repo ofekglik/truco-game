@@ -109,16 +109,23 @@ RULES:
 - SCORING: bidding team total >= bid → they score bid amount. Otherwise opponents score bid amount.
 
 CRITICAL CARD PLAY RULES (ranked by importance):
-1. PARTNER WINNING → play your CHEAPEST card (lowest points: 0pts > 2pts > 3pts > 4pts > 10pts > 11pts).
-2. CAN'T WIN → play your CHEAPEST card (lowest points). Never waste valuable cards on lost tricks.
-3. CAN WIN → use the CHEAPEST winning card. Never use ace(11pts) if king(4pts) wins. Never use 3(10pts) if 12(4pts) wins.
-4. LEADING → Lead aces of non-trump suits FIRST (guaranteed win, cash points).
-5. NEVER lead 3 if the ace of that suit is still unseen — the ace WILL capture your 3 (10pts lost).
-6. If ace was played, 3 is now strongest — lead it confidently.
-7. AVOID leading into suits where opponents are void — they will trump you.
-8. Save trumps for cutting (voiding in side suits, then trumping opponent leads).
-9. When defending: deny the bidding team points. Every 10pts you save matters.
-10. Protect king+horse pairs for singing.
+
+FOLLOWING SUIT:
+1. PARTNER WINNING via TRUMP CUT → LOAD points! Play your HIGHEST value card (ace=11pts, 3=10pts). Partner's trump secures the trick — feed them points.
+2. PARTNER WINNING (same suit, no cut) → play CHEAPEST card. A later opponent might still beat partner.
+3. CAN'T WIN (opponent winning or trumped) → play CHEAPEST card. Never waste valuable cards on lost tricks.
+4. CAN WIN → play the ace if you have it — it's UNBEATABLE and guarantees the win. If you're the LAST player (4th to play), ALWAYS play your highest winning card — the trick is fully visible, no one can beat you, cash maximum points now. Keeping the ace in hand risks it getting trumped later.
+5. FOLLOWING TRUMP SUIT → play the CHEAPEST card that satisfies the must-overbeat rule. Save the trump ace for when you really need it (cutting high-value tricks later).
+
+LEADING:
+6. Lead aces of NON-TRUMP suits FIRST — guaranteed win, cash 11pts safely.
+7. NEVER lead the trump ace early — save it for cutting opponents' strong suits or for late-game control.
+8. NEVER lead 3 if the ace of that suit is still unseen — the ace WILL capture your 3.
+9. If ace was played, 3 is now strongest — lead it confidently.
+10. AVOID leading into suits where opponents are void — they will trump you.
+11. Save trumps for cutting (void yourself in weak suits, then trump opponent leads).
+12. When defending: deny the bidding team points.
+13. Protect king+horse pairs for singing.
 
 Respond with ONLY the requested action in the exact format specified. No explanations.`;
 

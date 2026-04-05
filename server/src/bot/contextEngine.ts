@@ -673,14 +673,20 @@ export function buildTrickPlayContext(state: GameState, seat: SeatPosition): str
     }
   }
 
-  // Partner winning — dump low
+  // Partner winning — context-aware advice
   if (state.currentTrick.cards.length >= 1) {
     const winner = determineTrickWinner(
       { cards: state.currentTrick.cards, leadSeat: state.currentTrick.leadSeat },
       state.trumpSuit
     );
     if (SEAT_TEAM[winner.seat] === myTeam && winner.seat !== seat) {
-      warnings.push('Partner is winning → play your LOWEST value card to save strong ones.');
+      const leadSuit = state.currentTrick.cards[0].card.suit;
+      const winnerUsedTrump = winner.card.suit === state.trumpSuit && leadSuit !== state.trumpSuit;
+      if (winnerUsedTrump) {
+        warnings.push('Partner is winning via TRUMP CUT → LOAD points! Play your HIGHEST value card (ace, 3). The trump secures this trick.');
+      } else {
+        warnings.push('Partner is winning (same suit) → play CHEAPEST card. An opponent after you might still beat partner.');
+      }
     }
   }
 
