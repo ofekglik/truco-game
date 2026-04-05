@@ -14,9 +14,21 @@ export const supabase: SupabaseClient = isSupabaseConfigured()
       get: (_target: any, prop: string) => {
         if (prop === 'auth') {
           return new Proxy({} as any, {
-            get: () => (..._args: any[]) => ({ data: { subscription: { unsubscribe: () => {} } }, error: null }),
+            get: (_t: any, authProp: string) => {
+              if (authProp === 'onAuthStateChange') {
+                return () => ({ data: { subscription: { unsubscribe: () => {} } } });
+              }
+              if (authProp === 'getSession') {
+                return async () => ({ data: { session: null }, error: null });
+              }
+              if (authProp === 'getUser') {
+                return async () => ({ data: { user: null }, error: null });
+              }
+              // Default: return async no-op
+              return async (..._args: any[]) => ({ data: null, error: null });
+            },
           });
         }
-        return () => ({ data: null, error: { message: 'Supabase not configured' } });
+        return () => Promise.resolve({ data: null, error: { message: 'Supabase not configured' } });
       },
     }) as unknown as SupabaseClient);
