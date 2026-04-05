@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   ClientGameState, GamePhase, SeatPosition, Suit, SUIT_NAMES_HE, SUIT_SYMBOLS,
-  SUIT_COLORS, SEAT_NAMES_HE, SEAT_TEAM, Card as CardType, CARD_POWER, CapoType
+  SUIT_COLORS, SEAT_NAMES_HE, SEAT_TEAM, Card as CardType, CARD_POWER, CapoType,
+  LegendaryBotCost
 } from '../types';
 import { CardComponent, CardBack } from './Card';
 import { Scoreboard } from './Scoreboard';
@@ -19,6 +20,7 @@ interface GameTableProps {
   onLeaveRoom: () => void;
   reconnecting: boolean;
   connected: boolean;
+  legendaryBotCost: LegendaryBotCost | null;
 }
 
 function getRelativePosition(mySeat: SeatPosition, targetSeat: SeatPosition): 'bottom' | 'left' | 'right' | 'top' {
@@ -63,7 +65,7 @@ const playWinSound = () => {
 
 export const GameTable: React.FC<GameTableProps> = ({
   gameState, onPlayCard, onPlaceBid, onPassBid, onDeclareTrump, onSingCante, onDoneSinging, onChooseSinger, onNextRound,
-  onLeaveRoom, reconnecting, connected
+  onLeaveRoom, reconnecting, connected, legendaryBotCost
 }) => {
   const [showMenu, setShowMenu] = useState(false);
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
@@ -1176,6 +1178,18 @@ export const GameTable: React.FC<GameTableProps> = ({
           <div className="text-center">
             <div className="text-4xl mb-4 animate-spin">🔄</div>
             <p className="text-gray-300 text-lg">מתחבר מחדש...</p>
+          </div>
+        </div>
+      )}
+
+      {/* Legendary Bot Cost Tracker */}
+      {legendaryBotCost && legendaryBotCost.cost > 0 && (
+        <div className="absolute top-4 left-4 z-40 bg-black/60 backdrop-blur-sm border border-yellow-500/30 rounded-lg px-3 py-1.5 text-xs" dir="ltr">
+          <div className="flex items-center gap-2">
+            <span className="text-yellow-400">👑 AI</span>
+            <span className="text-gray-300">${legendaryBotCost.cost.toFixed(4)}</span>
+            <span className="text-gray-500">|</span>
+            <span className="text-gray-400">{(legendaryBotCost.inputTokens + legendaryBotCost.outputTokens).toLocaleString()} tok</span>
           </div>
         </div>
       )}

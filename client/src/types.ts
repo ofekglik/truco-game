@@ -173,3 +173,11 @@ export const SEAT_NAMES_HE: Record<SeatPosition, string> = {
 export const CARD_POWER: Record<Rank, number> = {
   2: 0, 4: 1, 5: 2, 6: 3, 7: 4, 10: 5, 11: 6, 12: 7, 3: 8, 1: 9
 };
+
+export type BotDifficulty = 'easy' | 'medium' | 'hard' | 'legendary';
+
+export interface LegendaryBotCost {
+  inputTokens: number;
+  outputTokens: number;
+  cost: number; // USD
+}

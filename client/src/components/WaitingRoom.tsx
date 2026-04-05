@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ClientGameState, SeatPosition, SEAT_NAMES_HE, SEAT_TEAM, GamePhase } from '../types';
+import { ClientGameState, SeatPosition, SEAT_NAMES_HE, SEAT_TEAM, GamePhase, BotDifficulty } from '../types';
 
 interface WaitingRoomProps {
   gameState: ClientGameState;
@@ -27,6 +27,10 @@ export const WaitingRoom: React.FC<WaitingRoomProps> = ({
   const [targetScoreEdit, setTargetScoreEdit] = useState(gameState.targetScore);
   const [showScoreEditor, setShowScoreEditor] = useState(false);
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
+  const [botDifficulty, setBotDifficulty] = useState<BotDifficulty>('medium');
+  const [addingBots, setAddingBots] = useState(false);
+  const [legendaryPassword, setLegendaryPassword] = useState('');
+  const [legendaryError, setLegendaryError] = useState('');
 
   const playerCount = SEAT_DISPLAY.filter((s) => gameState.players[s] !== null).length;
   const isRoomCreator = gameState.mySeat === 'south';
@@ -195,22 +199,87 @@ export const WaitingRoom: React.FC<WaitingRoomProps> = ({
             {SEAT_DISPLAY.map((seat) => renderSeatSlot(seat))}
           </div>
 
-          {/* Add Bots button (dev mode) */}
+          {/* Add Bots with difficulty selector */}
           {playerCount < 4 && isRoomCreator && (
-            <button
-              onClick={async () => {
-                try {
-                  await fetch('/api/bots', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ roomCode }),
-                  });
-                } catch (e) { console.error('Failed to add bots:', e); }
-              }}
-              className="w-full py-2 font-bold text-sm rounded-xl bg-purple-600/30 hover:bg-purple-500/40 text-purple-300 border border-purple-500/40 transition-all"
-            >
-              🤖 הוסף בוטים ({4 - playerCount} חסרים)
-            </button>
+            <div className="bg-gradient-to-br from-purple-900/30 to-gray-900/50 border border-purple-500/30 rounded-xl p-3 space-y-3">
+              <p className="text-purple-300 text-xs font-bold text-center">🤖 הוסף בוטים ({4 - playerCount} חסרים)</p>
+              <div className="flex gap-2 justify-center" dir="ltr">
+                {([
+                  { value: 'easy' as BotDifficulty, label: 'קל', emoji: '🟢' },
+                  { value: 'medium' as BotDifficulty, label: 'בינוני', emoji: '🟡' },
+                  { value: 'hard' as BotDifficulty, label: 'קשה', emoji: '🔴' },
+                  { value: 'legendary' as BotDifficulty, label: 'אגדי', emoji: '👑' },
+                ]).map(opt => (
+                  <button
+                    key={opt.value}
+                    onClick={() => { setBotDifficulty(opt.value); setLegendaryError(''); }}
+                    className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition-all ${
+                      botDifficulty === opt.value
+                        ? opt.value === 'legendary'
+                          ? 'bg-gradient-to-b from-yellow-600 to-amber-700 text-white border-2 border-yellow-400 shadow-lg shadow-yellow-500/30'
+                          : 'bg-purple-600 text-white border-2 border-purple-400 shadow-lg shadow-purple-500/30'
+                        : 'bg-gray-700/60 text-gray-400 border border-gray-600 hover:border-purple-400/50'
+                    }`}
+                  >
+                    <span className="block text-base">{opt.emoji}</span>
+                    <span>{opt.label}</span>
+                  </button>
+                ))}
+              </div>
+
+              {/* Legendary password input */}
+              {botDifficulty === 'legendary' && (
+                <div className="space-y-2">
+                  <div className="bg-yellow-900/20 border border-yellow-500/30 rounded-lg p-2 text-center">
+                    <p className="text-yellow-300 text-[10px]">🔒 בוט אגדי מופעל על ידי AI — נדרשת סיסמה</p>
+                  </div>
+                  <input
+                    type="password"
+                    placeholder="הזן סיסמה..."
+                    value={legendaryPassword}
+                    onChange={(e) => { setLegendaryPassword(e.target.value); setLegendaryError(''); }}
+                    className="w-full bg-gray-700/80 text-white rounded-lg px-3 py-2 text-sm border border-gray-600 focus:border-yellow-400 focus:outline-none placeholder-gray-500"
+                    dir="rtl"
+                  />
+                  {legendaryError && (
+                    <p className="text-red-400 text-xs text-center">{legendaryError}</p>
+                  )}
+                </div>
+              )}
+
+              <button
+                onClick={async () => {
+                  setAddingBots(true);
+                  setLegendaryError('');
+                  try {
+                    const body: Record<string, string> = { roomCode, difficulty: botDifficulty };
+                    if (botDifficulty === 'legendary') body.password = legendaryPassword;
+                    const resp = await fetch('/api/bots', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify(body),
+                    });
+                    if (!resp.ok) {
+                      const err = await resp.json();
+                      if (botDifficulty === 'legendary') {
+                        setLegendaryError(resp.status === 401 ? 'סיסמה שגויה' : err.error || 'שגיאה');
+                      }
+                    } else {
+                      setLegendaryPassword('');
+                    }
+                  } catch (e) { console.error('Failed to add bots:', e); }
+                  setAddingBots(false);
+                }}
+                disabled={addingBots || (botDifficulty === 'legendary' && !legendaryPassword)}
+                className={`w-full py-2 font-bold text-sm rounded-lg transition-all disabled:opacity-50 ${
+                  botDifficulty === 'legendary'
+                    ? 'bg-gradient-to-r from-yellow-600/50 to-amber-600/50 hover:from-yellow-500/60 hover:to-amber-500/60 text-yellow-200 border border-yellow-500/40'
+                    : 'bg-purple-600/50 hover:bg-purple-500/60 text-purple-200 border border-purple-500/40'
+                }`}
+              >
+                {addingBots ? 'מוסיף...' : botDifficulty === 'legendary' ? '👑 הוסף בוט אגדי' : 'הוסף בוטים'}
+              </button>
+            </div>
           )}
 
           {/* Start button */}
