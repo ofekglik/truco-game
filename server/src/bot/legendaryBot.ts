@@ -1,6 +1,7 @@
 /**
  * Legendary Bot — Haiku LLM-powered bot player
- * Uses Anthropic's Claude Haiku API with pre-computed Monte Carlo results
+ * Uses Anthropic's Claude Haiku API with rich precomputed context
+ * (card tracking, void detection, point counting, strategic analysis)
  * to make intelligent game decisions.
  *
  * Security: API key and password stored as environment variables only.
@@ -14,6 +15,10 @@ import {
 import { getValidPlays } from '../engine/tricks.js';
 import { getSingableSuits } from '../engine/singing.js';
 import { chooseBid, chooseTrump, chooseSinging, chooseSingerChoice, chooseCard } from './strategy.js';
+import {
+  buildBiddingContext, buildTrumpContext, buildSingerChoiceContext,
+  buildSingingContext, buildTrickPlayContext
+} from './contextEngine.js';
 
 // ─── Cost Tracking (per-bot, per-seat) ─────────────────────────────────────
 
@@ -90,155 +95,30 @@ export function isLegendaryEnabled(): boolean {
 
 // ─── Game Rules System Prompt ──────────────────────────────────────────────
 
-const GAME_RULES_PROMPT = `You are an expert player of "אטו" (Ato), a 4-player trick-taking card game played with a 40-card Spanish deck (suits: oros/זהב, copas/קופז, espadas/ספדה, bastos/שחור; ranks: 1,2,3,4,5,6,7,10,11,12).
+const GAME_RULES_PROMPT = `You are an expert player of "אטו" (Ato), a 4-player trick-taking card game.
+40-card Spanish deck. Suits: oros, copas, espadas, bastos. Ranks: 1,2,3,4,5,6,7,10,11,12.
+POINTS: 1=11, 3=10, 12=4, 11=3, 10=2, others=0. Total=120 trick + 10 last trick bonus = 130.
+POWER (weak→strong): 2,4,5,6,7,10,11,12,3,1
+TEAMS: south+north=team1, east+west=team2.
 
-CARD VALUES (points): 1=11pts, 3=10pts, 12=4pts, 11=3pts, 10=2pts. Others=0pts.
-Total deck points: 120 + 10 (last trick bonus) = 130.
+RULES:
+- BIDDING: min 70, increments of 10, max 230 (capo). Match current bid = declaration (signals partner). Pass = out.
+- TRUMP: bid winner declares trump suit.
+- SINGING: after bidding team wins a trick, they can sing cante (king+horse of same suit). Trump cante=40pts, non-trump=20pts. Bid 80: max 20pts, no trump cante. Bid 90-99: max 40pts. Bid 100+: no cap.
+- TRICK PLAY: must follow suit. Must overbeat lead suit (unless trump already played in trick). If void: must trump. Must overtrump if possible. Can't overtrump → free play.
+- SCORING: bidding team total >= bid → they score bid amount. Otherwise opponents score bid amount.
 
-CARD POWER (weakest→strongest): 2,4,5,6,7,10,11,12,3,1
+CRITICAL STRATEGY:
+- Track which cards have been played. The context tells you EXACTLY what's unseen.
+- If ace of a suit is still unseen, do NOT lead the 3 of that suit — it will be captured.
+- If the ace was already played, the 3 is now the strongest card in that suit — lead it confidently.
+- When partner is winning, dump your lowest-value card.
+- Lead aces from short non-trump suits first to cash guaranteed points.
+- Watch for opponent voids — they will trump your lead suit.
+- When defending: try to prevent the bidding team from reaching their bid. Every point you deny matters.
+- Protect king+horse pairs if you can still sing them.
 
-TEAMS: south+north = team1, east+west = team2
-
-GAME FLOW:
-1. BIDDING: Players bid how many points their team will score. Minimum bid 70, increments of 10, max 230 (capo).
-   - You can BID HIGHER than the current bid to become the new bid winner.
-   - You can MATCH the current bid as a "declaration" to signal your partner — this does NOT make you the bid winner; the first player to bid that amount keeps the lead.
-   - You can PASS (0) to drop out permanently for this round.
-   - Bidding continues until all but the bid winner have passed.
-2. TRUMP DECLARATION: The bid winner declares the trump suit.
-3. SINGING: The bid winner chooses who sings first (self or partner). Bidding team members declare "cante" if they hold king (12) + horse (11) of the same suit. Trump cante = 40pts, non-trump cante = 20pts.
-   - Bid exactly 80: no trump singing, max 20pts total (one non-trump cante only).
-   - Bid 90-99: max 40pts total singing (trump and non-trump allowed).
-   - Bid 100+: no singing cap.
-   After singing is done, trick play begins.
-4. TRICK PLAY: 10 tricks of 4 cards each.
-   - MUST FOLLOW lead suit if you have cards of that suit.
-   - OVERBEAT RULE: If following suit, you must play a card that beats the current highest card of the lead suit — UNLESS trump has already been played in this trick, in which case you just follow suit without needing to beat.
-   - If you can't follow lead suit and have trump cards: you MUST play a trump card.
-   - OVERTRUMP RULE: If trump is already in the trick, you must play a HIGHER trump if possible. If you cannot beat the existing trump, you may play ANY card from your hand (free play).
-   - If you can't follow suit and have no trumps: play any card (free play).
-   - Last trick of the round awards a 10-point bonus to the winning team.
-5. SCORING: Only the bid amount matters for the score.
-   - If the bidding team's total (trick points + singing points) >= their bid: the bidding team scores the bid amount. The opposing team scores 0.
-   - If the bidding team falls short: the OPPOSING team scores the bid amount. The bidding team scores 0.
-   - Game continues until a team reaches the target score.
-
-STRATEGY TIPS:
-- Aces (rank 1) are the strongest card and worth 11pts — leading with them is often safe.
-- 3s (rank 3) are second strongest and worth 10pts — powerful follow-up to aces.
-- Voids (no cards in a suit) let you cut with trumps — very valuable.
-- When your partner is winning the trick, dump your lowest-value card to save strong cards.
-- When leading, lead aces from short non-trump suits first (cash points before opponents can cut).
-- Count points to know if your team is on track to make the bid.
-- Declaration bids (matching current bid) can signal to your partner that you have a strong hand at that level.
-
-You must respond with ONLY the requested action in the exact format specified. No explanations.`;
-
-// ─── State Serialization ───────────────────────────────────────────────────
-
-function suitName(suit: Suit): string {
-  return SUIT_NAMES_HE[suit];
-}
-
-function cardStr(card: Card): string {
-  return `${card.rank}-${suitName(card.suit)}`;
-}
-
-function serializeGameState(state: GameState, seat: SeatPosition): string {
-  const player = state.players[seat];
-  if (!player) return 'ERROR: no player';
-  const myTeam = SEAT_TEAM[seat];
-  const partner = myTeam === 'team1'
-    ? (seat === 'south' ? 'north' : 'south')
-    : (seat === 'east' ? 'west' : 'east');
-
-  const lines: string[] = [];
-  lines.push(`You are sitting at: ${seat} (${myTeam})`);
-  lines.push(`Your partner: ${partner}`);
-  lines.push(`Trump suit: ${state.trumpSuit ? suitName(state.trumpSuit) : 'not declared yet'}`);
-  lines.push(`Round: ${state.roundNumber}, Trick: ${state.trickNumber}/10`);
-  lines.push(`Scores — team1: ${state.scores.team1}, team2: ${state.scores.team2} (target: ${state.targetScore})`);
-  lines.push(`Current bid: ${state.currentBidAmount} by ${state.currentBidWinner || 'none'} (${state.biddingTeam || 'none'})`);
-  lines.push(`Your hand: ${player.hand.map(cardStr).join(', ')}`);
-
-  // Singing info
-  if (state.cantes.length > 0) {
-    lines.push(`Cantes declared: ${state.cantes.map(c => `${suitName(c.suit)}${c.isTrump ? '(trump)' : ''} = ${c.points}pts by ${c.seat}`).join(', ')}`);
-  }
-
-  // Current trick
-  if (state.currentTrick.cards.length > 0) {
-    lines.push(`Current trick (lead: ${state.currentTrick.leadSeat}): ${state.currentTrick.cards.map(tc => `${tc.seat}: ${cardStr(tc.card)}`).join(' → ')}`);
-  } else if (state.phase === GamePhase.TRICK_PLAY) {
-    lines.push(`You are leading this trick.`);
-  }
-
-  // Completed tricks summary
-  if (state.completedTricks.length > 0) {
-    const team1Pts = state.completedTricks.reduce((sum, t) => {
-      const winner = t.winnerSeat;
-      if (winner && SEAT_TEAM[winner] === 'team1') {
-        return sum + t.cards.reduce((s, tc) => s + CARD_POINTS[tc.card.rank], 0);
-      }
-      return sum;
-    }, 0);
-    const team2Pts = state.completedTricks.reduce((sum, t) => {
-      const winner = t.winnerSeat;
-      if (winner && SEAT_TEAM[winner] === 'team2') {
-        return sum + t.cards.reduce((s, tc) => s + CARD_POINTS[tc.card.rank], 0);
-      }
-      return sum;
-    }, 0);
-    lines.push(`Trick points so far — team1: ${team1Pts}, team2: ${team2Pts}`);
-  }
-
-  // Bidding history
-  if (state.phase === GamePhase.BIDDING && state.bids.length > 0) {
-    lines.push(`Bidding history: ${state.bids.map(b => `${b.seat}: ${b.amount || 'pass'}`).join(', ')}`);
-  }
-
-  return lines.join('\n');
-}
-
-// ─── Monte Carlo Pre-computation ───────────────────────────────────────────
-
-interface MCResult {
-  cardId: string;
-  cardStr: string;
-  avgPoints: number;
-  winRate: number;
-}
-
-function precomputeMCForCards(
-  validPlays: Card[], state: GameState, seat: SeatPosition
-): string {
-  // Import and use the hard-mode Monte Carlo internally
-  // We'll replicate a lightweight version here to get scores
-  const results = validPlays.map(card => ({
-    cardId: card.id,
-    cardStr: cardStr(card),
-    note: `${CARD_POINTS[card.rank]}pts, power ${CARD_POWER[card.rank]}`,
-  }));
-
-  // Use the hard chooseCard to get the MC-recommended card
-  const mcBest = chooseCard(state, seat, 'hard');
-
-  return `Valid plays with analysis:\n${results.map(r =>
-    `  - ${r.cardStr} (${r.note})${mcBest && r.cardId === mcBest.id ? ' ★ Monte Carlo recommends' : ''}`
-  ).join('\n')}`;
-}
-
-function precomputeMCForBid(state: GameState, seat: SeatPosition): string {
-  const hardBid = chooseBid(state, seat, 'hard');
-  const medBid = chooseBid(state, seat, 'medium');
-  return `Monte Carlo analysis: hard-mode suggests bid ${hardBid || 'pass'}, medium-mode suggests bid ${medBid || 'pass'}`;
-}
-
-function precomputeMCForTrump(state: GameState, seat: SeatPosition): string {
-  const hardTrump = chooseTrump(state, seat, 'hard');
-  const medTrump = chooseTrump(state, seat, 'medium');
-  return `Monte Carlo analysis: hard-mode suggests ${suitName(hardTrump)}, medium-mode suggests ${suitName(medTrump)}`;
-}
+Respond with ONLY the requested action in the exact format specified. No explanations.`;
 
 // ─── Anthropic API Call ────────────────────────────────────────────────────
 
@@ -283,32 +163,67 @@ async function callHaiku(systemPrompt: string, userPrompt: string): Promise<{ te
 
 // ─── Decision Functions ────────────────────────────────────────────────────
 
+/** Parse a suit name from LLM response */
+function parseSuit(text: string): Suit | null {
+  const suitMap: Record<string, Suit> = {
+    oros: Suit.OROS, copas: Suit.COPAS, espadas: Suit.ESPADAS, bastos: Suit.BASTOS,
+  };
+  const cleaned = text.toLowerCase().trim();
+  return suitMap[cleaned] || null;
+}
+
+/** Parse a card (rank-suit) from LLM response, validating against valid plays */
+function parseCard(text: string, validPlays: Card[]): Card | null {
+  // Try "rank-suit" format (e.g., "1-oros", "3-copas")
+  const match = text.match(/(\d+)\s*[-–]\s*(oros|copas|espadas|bastos)/i);
+  if (match) {
+    const rank = parseInt(match[1], 10);
+    const suit = match[2].toLowerCase();
+    const found = validPlays.find(c => c.rank === rank && c.suit === suit);
+    if (found) return found;
+  }
+
+  // Try "suit-rank" format (e.g., "oros-1")
+  const idMatch = text.match(/(oros|copas|espadas|bastos)\s*[-–]\s*(\d+)/i);
+  if (idMatch) {
+    const suit = idMatch[1].toLowerCase();
+    const rank = parseInt(idMatch[2], 10);
+    const found = validPlays.find(c => c.rank === rank && c.suit === suit);
+    if (found) return found;
+  }
+
+  return null;
+}
+
 /**
- * Legendary bot: choose bid using LLM
- * Falls back to hard-mode strategy on API failure
+ * Legendary bot: choose bid using LLM with rich context.
+ * Context includes: hand analysis, suit strengths, singing potential, bidding math, MC analysis.
+ * Falls back to hard-mode strategy on API failure.
  */
 export async function legendaryChooseBid(
   state: GameState, seat: SeatPosition, roomCode: string
 ): Promise<number> {
   try {
-    const gameContext = serializeGameState(state, seat);
-    const mcAnalysis = precomputeMCForBid(state, seat);
+    const context = buildBiddingContext(state, seat);
     const minBid = Math.max(state.currentBidAmount, 70);
     const minHigherBid = Math.max(state.currentBidAmount + 10, 70);
 
-    const userPrompt = `${gameContext}
+    const userPrompt = `${context}
 
-${mcAnalysis}
-
-Current phase: BIDDING
+PHASE: BIDDING
 Current highest bid: ${state.currentBidAmount} by ${state.currentBidWinner || 'nobody'}
-You can:
-- PASS (respond with 0)
-- BID ${state.currentBidAmount > 0 ? state.currentBidAmount : 70} to declare (match current bid, signals strength to partner but does NOT make you the winner)
-- BID ${minHigherBid}+ to become the new bid winner (increments of 10, max 230)
+Your options:
+- 0 = PASS (drop out of bidding)
+- ${state.currentBidAmount > 0 ? state.currentBidAmount : 70} = DECLARATION (match current bid to signal partner — does NOT make you the winner)
+- ${minHigherBid}+ = BID HIGHER to become bid winner (increments of 10, max 230)
 
-Based on your hand strength, the Monte Carlo analysis, and the bidding history, what should you bid?
-Respond with ONLY a number (the bid amount, or 0 to pass).`;
+Think about:
+1. How many points will you LOSE in the worst case? Each suit without an ace risks ~15pts.
+2. Your singing potential adds guaranteed points.
+3. Your partner's bidding behavior hints at their strength.
+4. Don't bid more than your hand can realistically support.
+
+Respond with ONLY a number (bid amount, or 0 to pass).`;
 
     const result = await callHaiku(GAME_RULES_PROMPT, userPrompt);
     addCost(roomCode, seat, result.inputTokens, result.outputTokens);
@@ -325,42 +240,31 @@ Respond with ONLY a number (the bid amount, or 0 to pass).`;
 }
 
 /**
- * Legendary bot: choose trump using LLM
+ * Legendary bot: choose trump using LLM with rich context.
+ * Context includes: per-suit analysis with pros/cons, singing math, MC analysis.
  */
 export async function legendaryChooseTrump(
   state: GameState, seat: SeatPosition, roomCode: string
 ): Promise<Suit> {
   try {
-    const gameContext = serializeGameState(state, seat);
-    const mcAnalysis = precomputeMCForTrump(state, seat);
-    const player = state.players[seat];
-    if (!player) return chooseTrump(state, seat, 'hard');
+    const context = buildTrumpContext(state, seat);
 
-    // Count cards per suit for the prompt
-    const suitCounts = Object.values(Suit).map(s => {
-      const cards = player.hand.filter(c => c.suit === s);
-      return `${suitName(s)}: ${cards.length} cards (${cards.map(c => c.rank).join(',')})`;
-    }).join('\n  ');
+    const userPrompt = `${context}
 
-    const userPrompt = `${gameContext}
+Choose the BEST trump suit. Consider:
+1. Length (more trumps = more control)
+2. High cards (ace, 3 in trump are dominant)
+3. Cante potential (king+horse in trump = 40pts singing!)
+4. Voids in OTHER suits (let you cut with trump)
+5. Math: how many trick points do you need after singing?
 
-${mcAnalysis}
-
-Current phase: TRUMP DECLARATION — you won the bid!
-Your suit distribution:
-  ${suitCounts}
-
-Which suit should be trump? Consider: longest suit, high cards in suit, cante potential (king+horse), voids in other suits.
-Respond with ONLY the suit name in English: oros, copas, espadas, or bastos`;
+Respond with ONLY the suit name: oros, copas, espadas, or bastos`;
 
     const result = await callHaiku(GAME_RULES_PROMPT, userPrompt);
     addCost(roomCode, seat, result.inputTokens, result.outputTokens);
 
-    const suitStr = result.text.toLowerCase().trim();
-    const suitMap: Record<string, Suit> = {
-      oros: Suit.OROS, copas: Suit.COPAS, espadas: Suit.ESPADAS, bastos: Suit.BASTOS,
-    };
-    return suitMap[suitStr] || chooseTrump(state, seat, 'hard');
+    const suit = parseSuit(result.text);
+    return suit || chooseTrump(state, seat, 'hard');
   } catch (err) {
     console.error('[legendary] Trump fallback to hard:', err);
     return chooseTrump(state, seat, 'hard');
@@ -368,28 +272,79 @@ Respond with ONLY the suit name in English: oros, copas, espadas, or bastos`;
 }
 
 /**
- * Legendary bot: choose singing using LLM
+ * Legendary bot: choose which suit to sing.
+ * If only one option, no API call needed. If multiple, uses LLM to pick.
+ * Prefers trump cante (40pts) over non-trump (20pts) — but the LLM can reason about caps.
  */
 export async function legendaryChooseSinging(
   state: GameState, seat: SeatPosition, roomCode: string
 ): Promise<Suit | null> {
-  // Singing is mechanical — if you have king+horse, you sing. Use hard strategy.
-  // No need to waste API calls on this.
-  return chooseSinging(state, seat, 'hard');
+  const player = state.players[seat];
+  if (!player || !state.trumpSuit || !state.biddingTeam) return null;
+  if (SEAT_TEAM[seat] !== state.biddingTeam) return null;
+
+  const singable = getSingableSuits(
+    player.hand, state.trumpSuit, state.currentBidAmount,
+    state.cantes, seat, state.biddingTeam
+  );
+  if (singable.length === 0) return null;
+  if (singable.length === 1) return singable[0]; // Only one option, no need for LLM
+
+  // Multiple options — use LLM to decide (e.g., trump 40pts vs non-trump 20pts with caps)
+  try {
+    const context = buildSingingContext(state, seat);
+    const userPrompt = `${context}
+
+Which cante should you sing NOW?
+Remember: trump cante = 40pts, non-trump = 20pts. Singing caps may limit future singing.
+Respond with ONLY the suit name: ${singable.join(', ')}`;
+
+    const result = await callHaiku(GAME_RULES_PROMPT, userPrompt);
+    addCost(roomCode, seat, result.inputTokens, result.outputTokens);
+
+    const suit = parseSuit(result.text);
+    if (suit && singable.includes(suit)) return suit;
+    // Fallback: prefer trump
+    return chooseSinging(state, seat, 'hard');
+  } catch (err) {
+    console.error('[legendary] Singing fallback to hard:', err);
+    return chooseSinging(state, seat, 'hard');
+  }
 }
 
 /**
- * Legendary bot: choose singer (self/partner) using LLM
+ * Legendary bot: choose singer (self or partner) using LLM.
+ * This is a strategic decision: the LLM reasons about which cante is more valuable,
+ * whether it's protected (ace in hand), and singing cap constraints.
  */
 export async function legendaryChooseSingerChoice(
   state: GameState, seat: SeatPosition, roomCode: string
 ): Promise<'self' | 'partner'> {
-  // Simple decision, use hard strategy
-  return chooseSingerChoice(state, seat, 'hard');
+  try {
+    const context = buildSingerChoiceContext(state, seat);
+    if (!context) return chooseSingerChoice(state, seat, 'hard');
+
+    const userPrompt = `${context}
+
+Who should sing first: "self" or "partner"?
+Respond with ONLY one word: self or partner`;
+
+    const result = await callHaiku(GAME_RULES_PROMPT, userPrompt);
+    addCost(roomCode, seat, result.inputTokens, result.outputTokens);
+
+    const cleaned = result.text.toLowerCase().trim();
+    if (cleaned === 'self' || cleaned === 'partner') return cleaned;
+    return chooseSingerChoice(state, seat, 'hard');
+  } catch (err) {
+    console.error('[legendary] Singer choice fallback to hard:', err);
+    return chooseSingerChoice(state, seat, 'hard');
+  }
 }
 
 /**
- * Legendary bot: choose card to play using LLM + Monte Carlo
+ * Legendary bot: choose card to play using LLM with full game context.
+ * Context includes: card tracking, void detection, point counting,
+ * trick history, strategic warnings, and MC recommendation.
  */
 export async function legendaryChooseCard(
   state: GameState, seat: SeatPosition, roomCode: string
@@ -402,42 +357,25 @@ export async function legendaryChooseCard(
   if (validPlays.length === 1) return validPlays[0]; // No choice needed, save API call
 
   try {
-    const gameContext = serializeGameState(state, seat);
-    const mcAnalysis = precomputeMCForCards(validPlays, state, seat);
+    const context = buildTrickPlayContext(state, seat);
 
-    const userPrompt = `${gameContext}
+    const userPrompt = `${context}
 
-${mcAnalysis}
-
-Current phase: TRICK PLAY
 ${state.currentTrick.cards.length === 0
-  ? 'You are LEADING this trick. Choose wisely — your card sets the lead suit.'
-  : `You are FOLLOWING. Lead suit: ${suitName(state.currentTrick.cards[0].card.suit)}`}
+  ? 'You are LEADING. Your card sets the lead suit for everyone.'
+  : `You are FOLLOWING. Lead suit: ${state.currentTrick.cards[0].card.suit}`}
 
-Consider: Monte Carlo recommendation, card points at stake, partner position, trump conservation.
-Which card should you play?
-Respond with ONLY the card in format: rank-suit (e.g. "1-oros" for ace of oros). Use English suit names.`;
+Use the card tracker, void info, trick history, and strategic warnings above.
+Think about what cards opponents likely hold based on their play patterns.
+Choose the BEST card considering points at stake, position, and remaining tricks.
+
+Respond with ONLY the card: rank-suit (e.g. "1-oros" for ace of oros)`;
 
     const result = await callHaiku(GAME_RULES_PROMPT, userPrompt);
     addCost(roomCode, seat, result.inputTokens, result.outputTokens);
 
-    // Parse response like "1-oros" or "3-copas"
-    const match = result.text.match(/(\d+)\s*[-–]\s*(oros|copas|espadas|bastos)/i);
-    if (match) {
-      const rank = parseInt(match[1], 10);
-      const suit = match[2].toLowerCase();
-      const found = validPlays.find(c => c.rank === rank && c.suit === suit);
-      if (found) return found;
-    }
-
-    // Try matching just the card id format
-    const idMatch = result.text.match(/(oros|copas|espadas|bastos)-(\d+)/i);
-    if (idMatch) {
-      const suit = idMatch[1].toLowerCase();
-      const rank = parseInt(idMatch[2], 10);
-      const found = validPlays.find(c => c.rank === rank && c.suit === suit);
-      if (found) return found;
-    }
+    const card = parseCard(result.text, validPlays);
+    if (card) return card;
 
     console.log(`[legendary] Could not parse card response: "${result.text}", falling back to MC`);
     return chooseCard(state, seat, 'hard');
