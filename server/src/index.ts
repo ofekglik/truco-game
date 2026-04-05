@@ -14,7 +14,7 @@ import {
 import { GamePhase, SEAT_ORDER, SeatPosition, Suit } from './engine/types.js';
 import { supabase, isSupabaseConfigured } from './lib/supabase.js';
 import { recordGameResults } from './lib/gameRecorder.js';
-import { addBotsToRoom, isBotSeat, isLegendaryBotSeat, executeBotTurn, executeLegendaryBotTurn, executeBotSingingChoice, removeBotsFromRoom, roomHasLegendaryBots } from './bot/botPlayer.js';
+import { addBotsToRoom, addBotToSeat, removeBotFromSeat, isBotSeat, isLegendaryBotSeat, executeBotTurn, executeLegendaryBotTurn, executeBotSingingChoice, removeBotsFromRoom, roomHasLegendaryBots } from './bot/botPlayer.js';
 import { validateLegendaryPassword, isLegendaryEnabled, getRoomCost, resetRoomCost } from './bot/legendaryBot.js';
 
 const app = express();
@@ -69,6 +69,51 @@ app.post('/api/bots', (req, res) => {
   broadcastState(room);
   broadcastRoomsList();
   res.json({ added: bots.length, difficulty: botDifficulty, bots: bots.map(b => ({ seat: b.seat, name: b.name })) });
+});
+
+// Add a single bot to a specific seat
+app.post('/api/bots/seat', (req, res) => {
+  const { roomCode, seat, difficulty, password } = req.body;
+  if (!roomCode || !seat) return res.status(400).json({ error: 'roomCode and seat required' });
+  const room = getRoomByCode(roomCode);
+  if (!room) return res.status(404).json({ error: 'Room not found' });
+
+  const validSeats = ['south', 'east', 'north', 'west'];
+  if (!validSeats.includes(seat)) return res.status(400).json({ error: 'Invalid seat' });
+
+  if (difficulty === 'legendary') {
+    if (!isLegendaryEnabled()) {
+      return res.status(403).json({ error: 'Legendary bots are not available on this server' });
+    }
+    if (!password || !validateLegendaryPassword(password)) {
+      return res.status(401).json({ error: 'Invalid password for legendary bots' });
+    }
+  }
+
+  const validDifficulties = ['easy', 'medium', 'hard', 'legendary'];
+  const botDifficulty = validDifficulties.includes(difficulty) ? difficulty : 'medium';
+  const bot = addBotToSeat(room, seat, botDifficulty);
+  if (!bot) return res.status(409).json({ error: 'Seat is already occupied' });
+
+  if (botDifficulty === 'legendary') resetRoomCost(room.code);
+  broadcastState(room);
+  broadcastRoomsList();
+  res.json({ seat: bot.seat, name: bot.name, difficulty: botDifficulty });
+});
+
+// Remove a bot from a specific seat
+app.delete('/api/bots/seat', (req, res) => {
+  const { roomCode, seat } = req.body;
+  if (!roomCode || !seat) return res.status(400).json({ error: 'roomCode and seat required' });
+  const room = getRoomByCode(roomCode);
+  if (!room) return res.status(404).json({ error: 'Room not found' });
+
+  const removed = removeBotFromSeat(room, seat);
+  if (!removed) return res.status(404).json({ error: 'No bot at that seat' });
+
+  broadcastState(room);
+  broadcastRoomsList();
+  res.json({ removed: true, seat });
 });
 
 // Cost tracking endpoint — returns current room's LLM cost

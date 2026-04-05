@@ -96,6 +96,74 @@ export function addBotsToRoom(room: Room, difficulty: FullBotDifficulty = 'mediu
 }
 
 /**
+ * Add a single bot to a specific seat.
+ * Returns the bot if added, null if seat is occupied.
+ */
+export function addBotToSeat(room: Room, seat: SeatPosition, difficulty: FullBotDifficulty = 'medium'): BotInstance | null {
+  if (room.state.players[seat]) return null; // seat occupied
+
+  const existing = roomBots.get(room.code) || [];
+  const botIdx = existing.length;
+  const names = BOT_NAMES[difficulty];
+  const avatars = BOT_AVATARS[difficulty];
+
+  const bot: BotInstance = {
+    seat,
+    name: names[botIdx % names.length],
+    avatar: avatars[botIdx % avatars.length],
+    difficulty,
+  };
+
+  room.state.players[seat] = {
+    id: `bot-${seat}-${Date.now()}`,
+    name: bot.name,
+    seat,
+    hand: [],
+    connected: true,
+    avatar: bot.avatar,
+  };
+
+  const fakeSid = `bot-${seat}-${Date.now()}`;
+  room.socketToSeat.set(fakeSid, seat);
+  room.seatToSocket.set(seat, fakeSid);
+
+  roomBots.set(room.code, [...existing, bot]);
+  return bot;
+}
+
+/**
+ * Remove a single bot from a specific seat.
+ * Returns true if a bot was removed.
+ */
+export function removeBotFromSeat(room: Room, seat: SeatPosition): boolean {
+  const bots = roomBots.get(room.code);
+  if (!bots) return false;
+
+  const botIndex = bots.findIndex(b => b.seat === seat);
+  if (botIndex === -1) return false;
+
+  // Remove from game state
+  room.state.players[seat] = null;
+
+  // Remove from socket maps
+  const entriesToRemove: string[] = [];
+  for (const [sid, s] of room.socketToSeat.entries()) {
+    if (s === seat && sid.startsWith('bot-')) entriesToRemove.push(sid);
+  }
+  for (const sid of entriesToRemove) {
+    room.socketToSeat.delete(sid);
+  }
+  room.seatToSocket.delete(seat);
+
+  // Remove from bots list
+  bots.splice(botIndex, 1);
+  if (bots.length === 0) roomBots.delete(room.code);
+  else roomBots.set(room.code, bots);
+
+  return true;
+}
+
+/**
  * Check if a seat is a bot
  */
 export function isBotSeat(roomCode: string, seat: SeatPosition): boolean {
