@@ -1160,7 +1160,7 @@ export const GameTable: React.FC<GameTableProps> = ({
       </div>
 
       {trickToast && (
-        <div className="absolute top-1 left-1/2 -translate-x-1/2 z-30 animate-slideInTop">
+        <div className="absolute top-12 left-1/2 -translate-x-1/2 z-30 animate-slideInTop">
           <div className="bg-black/90 backdrop-blur-sm rounded-full px-5 py-2 text-sm text-white border border-yellow-500/50 shadow-lg shadow-yellow-500/20">
             <span className="font-bold text-yellow-400">{trickToast.winner}</span>
             <span className="mx-1">לקח את הסיבוב</span>
@@ -1277,10 +1277,10 @@ export const GameTable: React.FC<GameTableProps> = ({
 
       <button
         onClick={() => setShowScorePill(!showScorePill)}
-        className={`absolute top-1 z-20 ${
+        className={`absolute top-1 left-1/2 -translate-x-1/2 z-20 ${
           isMobile
-            ? 'left-1 bg-black/70 backdrop-blur-sm rounded-full px-3 py-1 text-[10px] font-bold border border-gray-700 flex items-center gap-1.5'
-            : 'left-2 bg-gradient-to-r from-blue-900/80 to-red-900/80 backdrop-blur-sm rounded-full px-4 py-2 text-sm font-bold border border-gray-600 hover:border-yellow-400 hover:shadow-lg hover:shadow-yellow-400/50 flex items-center gap-2 transition-all'
+            ? 'bg-black/70 backdrop-blur-sm rounded-full px-3 py-1 text-[10px] font-bold border border-gray-700 flex items-center gap-1.5'
+            : 'bg-gradient-to-r from-blue-900/80 to-red-900/80 backdrop-blur-sm rounded-full px-4 py-2 text-sm font-bold border border-gray-600 hover:border-yellow-400 hover:shadow-lg hover:shadow-yellow-400/50 flex items-center gap-2 transition-all'
         }`}
       >
         {/* Trump info: "עדי קנה 90 ספדה ⚔️" */}

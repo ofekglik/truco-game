@@ -443,7 +443,13 @@ io.on('connection', (socket) => {
       return;
     }
     if (room.state.phase !== GamePhase.WAITING) return;
-    
+
+    // Reset AI cost tracking for the new game
+    if (roomHasLegendaryBots(room.code)) {
+      resetRoomCost(room.code);
+      emitCostUpdate(room);
+    }
+
     startRound(room.state);
     broadcastState(room);
   });
@@ -542,6 +548,12 @@ io.on('connection', (socket) => {
       recordGameResults(stateSnapshot, room.code).catch(err => {
         console.error('[nextRound] Failed to record game results:', err);
       });
+
+      // Reset AI cost tracking for the new game
+      if (roomHasLegendaryBots(room.code)) {
+        resetRoomCost(room.code);
+        emitCostUpdate(room);
+      }
     }
 
     nextRound(room.state);
