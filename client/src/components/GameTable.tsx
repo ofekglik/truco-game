@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   ClientGameState, GamePhase, SeatPosition, Suit, SUIT_NAMES_HE, SUIT_SYMBOLS,
-  SUIT_COLORS, SEAT_NAMES_HE, SEAT_TEAM, Card as CardType, CARD_POWER
+  SUIT_COLORS, SEAT_NAMES_HE, SEAT_TEAM, Card as CardType, CARD_POWER, CapoType
 } from '../types';
 import { CardComponent, CardBack } from './Card';
 import { Scoreboard } from './Scoreboard';
@@ -82,6 +82,7 @@ export const GameTable: React.FC<GameTableProps> = ({
   const [focusedTrickCard, setFocusedTrickCard] = useState<string | null>(null);
   const [panelCollapsed, setPanelCollapsed] = useState(false);
   const [mobileBidValue, setMobileBidValue] = useState(70);
+  const [capoAnnouncement, setCapoAnnouncement] = useState<{ type: CapoType; playerName: string } | null>(null);
   // completedTrickDisplay removed — server now handles the 2.5s trick display delay
   const handScrollRef = useRef<HTMLDivElement>(null);
   const panelSwipeRef = useRef<{ startY: number } | null>(null);
@@ -122,12 +123,13 @@ export const GameTable: React.FC<GameTableProps> = ({
       setWindowWidth(window.innerWidth);
       setWindowHeight(window.innerHeight);
     };
+    const handleOrientationChange = () => setTimeout(handleResize, 100);
     window.addEventListener('resize', handleResize);
     // Also listen to orientationchange for mobile Safari
-    window.addEventListener('orientationchange', () => setTimeout(handleResize, 100));
+    window.addEventListener('orientationchange', handleOrientationChange);
     return () => {
       window.removeEventListener('resize', handleResize);
-      window.removeEventListener('orientationchange', () => setTimeout(handleResize, 100));
+      window.removeEventListener('orientationchange', handleOrientationChange);
     };
   }, []);
 
@@ -139,6 +141,23 @@ export const GameTable: React.FC<GameTableProps> = ({
   useEffect(() => {
     setPanelCollapsed(false);
   }, [gameState.phase]);
+
+  // Show capo announcement when entering TRUMP_DECLARATION with a capo type
+  const prevPhaseRef = useRef(gameState.phase);
+  useEffect(() => {
+    if (
+      gameState.phase === GamePhase.TRUMP_DECLARATION &&
+      prevPhaseRef.current !== GamePhase.TRUMP_DECLARATION &&
+      gameState.capoType !== CapoType.NONE
+    ) {
+      const declarer = gameState.capoDeclarerSeat
+        ? gameState.players[gameState.capoDeclarerSeat]?.name || '?'
+        : '?';
+      setCapoAnnouncement({ type: gameState.capoType, playerName: declarer });
+      setTimeout(() => setCapoAnnouncement(null), 3500);
+    }
+    prevPhaseRef.current = gameState.phase;
+  }, [gameState.phase, gameState.capoType, gameState.capoDeclarerSeat]);
 
   // Keep mobile bid stepper in sync with current minimum bid
   useEffect(() => {
@@ -167,7 +186,7 @@ export const GameTable: React.FC<GameTableProps> = ({
   useEffect(() => {
     if (gameState.completedTricks.length > lastCompletedTricksLength && gameState.completedTricks.length > 0) {
       const lastTrick = gameState.completedTricks[gameState.completedTricks.length - 1];
-      if (lastTrick.winnerSeat) {
+      if (lastTrick && lastTrick.winnerSeat) {
         const winnerPlayer = gameState.players[lastTrick.winnerSeat];
         if (winnerPlayer) {
           setTrickToast({
@@ -329,12 +348,18 @@ export const GameTable: React.FC<GameTableProps> = ({
                 {player.name}
                 {!player.connected && <span className={`text-red-400 ml-1 ${isMobile ? 'text-[8px]' : 'text-xs'}`}>• לא מחובר</span>}
               </div>
-              {/* Bid badge during bidding phase */}
-              {gameState.phase === GamePhase.BIDDING && gameState.currentBidWinner === seat && gameState.currentBidAmount > 0 && (
-                <div className={`${isMobile ? 'text-[9px]' : 'text-xs'} text-yellow-400 font-bold`}>
-                  הצעה: {gameState.currentBidAmount}
-                </div>
-              )}
+              {/* Bid badge during bidding phase — show each player's last bid */}
+              {gameState.phase === GamePhase.BIDDING && (() => {
+                const playerBids = gameState.bids.filter(b => b.seat === seat);
+                const lastBid = playerBids[playerBids.length - 1];
+                if (!lastBid) return null;
+                const isWinning = gameState.currentBidWinner === seat;
+                return (
+                  <div className={`${isMobile ? 'text-[9px]' : 'text-xs'} font-bold ${isWinning ? 'text-yellow-400' : 'text-gray-400'}`}>
+                    {lastBid.amount === 0 ? 'פאס' : lastBid.amount}
+                  </div>
+                );
+              })()}
               {/* Lead player badge — only during bidding to show who starts first trick */}
               {gameState.phase === GamePhase.BIDDING && gameState.currentTrick.leadSeat === seat && (
                 <div className={`${isMobile ? 'text-[9px]' : 'text-xs'} text-green-400 font-bold`}>
@@ -371,7 +396,7 @@ export const GameTable: React.FC<GameTableProps> = ({
     if (cards.length === 0) return null;
 
     // Spread cards toward each player — enough spacing so all 4 are fully visible
-    const off = isMobile ? 44 : 70;
+    const off = isMobile ? 72 : 115;
 
     // Each card shifts slightly toward the player who played it
     const positionMap: Record<string, { x: number; y: number }> = {
@@ -491,7 +516,7 @@ export const GameTable: React.FC<GameTableProps> = ({
             <span className="text-gray-400 text-xs font-medium">הצע סכום</span>
             {gameState.currentBidAmount > 0 ? (
               <span className="text-yellow-400 text-sm font-bold">
-                הצעה נוכחית: {gameState.currentBidAmount} ע״י {gameState.players[gameState.currentBidWinner!]?.name}
+                הצעה נוכחית: {gameState.currentBidAmount} ע״י {gameState.currentBidWinner && gameState.players[gameState.currentBidWinner]?.name}
               </span>
             ) : (
               <span className="text-gray-500 text-xs">אין הצעות עדיין</span>
@@ -1133,12 +1158,14 @@ export const GameTable: React.FC<GameTableProps> = ({
       </div>
 
       {trickToast && (
-        <div className="absolute top-16 left-1/2 -translate-x-1/2 z-25 animate-slideInTop">
-          <div className="bg-black/80 backdrop-blur-sm rounded-lg px-4 py-2 text-sm text-white border border-gray-600">
-            <span className="font-bold">{trickToast.winner}</span> ניצח לקיחה |
-            <span className="text-blue-400 mx-2 font-bold">{trickToast.team1}</span>
-            <span className="text-gray-500">-</span>
-            <span className="text-red-400 mx-2 font-bold">{trickToast.team2}</span>
+        <div className="absolute top-1 left-1/2 -translate-x-1/2 z-30 animate-slideInTop">
+          <div className="bg-black/90 backdrop-blur-sm rounded-full px-5 py-2 text-sm text-white border border-yellow-500/50 shadow-lg shadow-yellow-500/20">
+            <span className="font-bold text-yellow-400">{trickToast.winner}</span>
+            <span className="mx-1">לקח את הסיבוב</span>
+            <span className="text-gray-500 mx-1">|</span>
+            <span className="text-blue-400 font-bold">{trickToast.team1}</span>
+            <span className="text-gray-500 mx-0.5">-</span>
+            <span className="text-red-400 font-bold">{trickToast.team2}</span>
           </div>
         </div>
       )}
@@ -1231,10 +1258,10 @@ export const GameTable: React.FC<GameTableProps> = ({
 
       <button
         onClick={() => setShowScorePill(!showScorePill)}
-        className={`absolute top-1 left-1/2 -translate-x-1/2 z-20 ${
+        className={`absolute top-1 z-20 ${
           isMobile
-            ? 'bg-black/70 backdrop-blur-sm rounded-full px-3 py-1 text-[10px] font-bold border border-gray-700 flex items-center gap-1.5'
-            : 'bg-gradient-to-r from-blue-900/80 to-red-900/80 backdrop-blur-sm rounded-full px-4 py-2 text-sm font-bold border border-gray-600 hover:border-yellow-400 hover:shadow-lg hover:shadow-yellow-400/50 flex items-center gap-2 transition-all'
+            ? 'left-1 bg-black/70 backdrop-blur-sm rounded-full px-3 py-1 text-[10px] font-bold border border-gray-700 flex items-center gap-1.5'
+            : 'left-2 bg-gradient-to-r from-blue-900/80 to-red-900/80 backdrop-blur-sm rounded-full px-4 py-2 text-sm font-bold border border-gray-600 hover:border-yellow-400 hover:shadow-lg hover:shadow-yellow-400/50 flex items-center gap-2 transition-all'
         }`}
       >
         {/* Trump info: "עדי קנה 90 ספדה ⚔️" */}
@@ -1430,13 +1457,42 @@ export const GameTable: React.FC<GameTableProps> = ({
               style={!isMyTurn ? { borderColor: myTeamColor } : undefined}>
               {gameState.players[gameState.mySeat]!.avatar && <span className="mr-1">{gameState.players[gameState.mySeat]!.avatar}</span>}
               {gameState.players[gameState.mySeat]!.name}
-              {gameState.phase === GamePhase.BIDDING && gameState.currentBidWinner === gameState.mySeat && gameState.currentBidAmount > 0 && (
-                <span className="text-yellow-400 font-bold ml-1">({gameState.currentBidAmount})</span>
-              )}
+              {gameState.phase === GamePhase.BIDDING && (() => {
+                const myBids = gameState.bids.filter(b => b.seat === gameState.mySeat);
+                const lastBid = myBids[myBids.length - 1];
+                if (!lastBid) return null;
+                const isWinning = gameState.currentBidWinner === gameState.mySeat;
+                return (
+                  <span className={`font-bold ml-1 ${isWinning ? 'text-yellow-400' : 'text-gray-400'}`}>
+                    ({lastBid.amount === 0 ? 'פאס' : lastBid.amount})
+                  </span>
+                );
+              })()}
             </div>
           );
         })()}
       </div>
+
+      {/* Capo announcement overlay */}
+      {capoAnnouncement && (
+        <div className={`${isMobile ? 'fixed' : 'absolute'} inset-0 z-50 bg-black/80 flex items-center justify-center backdrop-blur-md animate-fadeIn`}>
+          <div className="bg-gradient-to-b from-[#2a1a00] to-[#1a1200] border-2 border-yellow-500 rounded-2xl p-6 w-full max-w-sm shadow-2xl mx-4 text-center animate-slideUpBottom">
+            <div className="text-6xl mb-3">
+              {capoAnnouncement.type === CapoType.TECHNICAL ? '👑' : '🔥'}
+            </div>
+            <h2 className="text-2xl font-bold text-yellow-400 mb-2">
+              {capoAnnouncement.type === CapoType.TECHNICAL ? 'קאפו טכני!' : 'קאפו!'}
+            </h2>
+            <p className="text-white text-lg mb-1">{capoAnnouncement.playerName}</p>
+            <p className="text-gray-400 text-sm">
+              {capoAnnouncement.type === CapoType.TECHNICAL
+                ? 'מחזיק 4 מלכים או 4 סוסים — קונה אוטומטית ב-230!'
+                : 'הכריז קאפו — 230 נקודות!'}
+            </p>
+            <p className="text-yellow-500/60 text-xs mt-3">בוחר אטו...</p>
+          </div>
+        </div>
+      )}
 
       {/* Action panels */}
       {renderBiddingPanel()}

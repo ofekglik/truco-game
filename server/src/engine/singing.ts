@@ -46,8 +46,9 @@ export function getSingableSuits(
     if (bidAmount < 80) continue; // No singing below 80
     
     if (bidAmount === 80) {
-      // Only regular cantes, no trump
+      // Only regular cantes, no trump, max 20 pts total (1 cante)
       if (isTrump) continue;
+      if (existingPoints + cantePoints > 20) continue;
       singable.push(suit);
     } else if (bidAmount >= 90 && bidAmount < 100) {
       // Max 40 pts from singing

@@ -309,12 +309,16 @@ export function updateRoomSettings(socketId: string, settings: { targetScore: nu
   // Only allow changing settings during WAITING phase
   if (room.state.phase !== GamePhase.WAITING) return null;
 
-  // Validate settings
-  if (settings.targetScore && settings.targetScore > 0) {
+  // Validate settings — clamp to valid range
+  if (settings.targetScore && Number.isInteger(settings.targetScore) && settings.targetScore >= 500 && settings.targetScore <= 2000) {
     room.state.targetScore = settings.targetScore;
   }
 
   return { room };
+}
+
+export function deleteRoom(code: string): void {
+  rooms.delete(code);
 }
 
 export function leaveRoom(socketId: string): { room: Room; seat: SeatPosition } | null {

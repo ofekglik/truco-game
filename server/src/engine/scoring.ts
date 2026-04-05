@@ -13,6 +13,10 @@ export function calculateTrickPoints(trick: Trick): number {
 }
 
 export function determineTrickWinner(trick: Trick, trumpSuit: Suit | null): TrickCard {
+  if (!trick.cards || trick.cards.length === 0) {
+    // Safety: should never happen, but prevents crash
+    return { card: { id: 'unknown', suit: 'espadas' as Suit, rank: 2 as Rank }, seat: 'south' as any };
+  }
   const leadSuit = trick.cards[0].card.suit;
   let winner = trick.cards[0];
   
