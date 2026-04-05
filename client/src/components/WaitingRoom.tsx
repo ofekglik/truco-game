@@ -195,6 +195,24 @@ export const WaitingRoom: React.FC<WaitingRoomProps> = ({
             {SEAT_DISPLAY.map((seat) => renderSeatSlot(seat))}
           </div>
 
+          {/* Add Bots button (dev mode) */}
+          {playerCount < 4 && isRoomCreator && (
+            <button
+              onClick={async () => {
+                try {
+                  await fetch('/api/bots', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ roomCode }),
+                  });
+                } catch (e) { console.error('Failed to add bots:', e); }
+              }}
+              className="w-full py-2 font-bold text-sm rounded-xl bg-purple-600/30 hover:bg-purple-500/40 text-purple-300 border border-purple-500/40 transition-all"
+            >
+              🤖 הוסף בוטים ({4 - playerCount} חסרים)
+            </button>
+          )}
+
           {/* Start button */}
           <button
             onClick={onStartGame}

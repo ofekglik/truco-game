@@ -13,6 +13,7 @@ import {
 import { GamePhase, SEAT_ORDER, SeatPosition, Suit } from './engine/types.js';
 import { supabase, isSupabaseConfigured } from './lib/supabase.js';
 import { recordGameResults } from './lib/gameRecorder.js';
+import { addBotsToRoom, isBotSeat, executeBotTurn, executeBotSingingChoice, removeBotsFromRoom } from './bot/botPlayer.js';
 
 const app = express();
 app.use(cors());
@@ -36,6 +37,19 @@ app.use(express.static(clientDist, {
 
 // Health check
 app.get('/health', (_req, res) => res.json({ status: 'ok' }));
+
+// Bot API — add bots to a room for local testing
+app.use(express.json());
+app.post('/api/bots', (req, res) => {
+  const { roomCode } = req.body;
+  if (!roomCode) return res.status(400).json({ error: 'roomCode required' });
+  const room = getRoomByCode(roomCode);
+  if (!room) return res.status(404).json({ error: 'Room not found' });
+  const bots = addBotsToRoom(room);
+  broadcastState(room);
+  broadcastRoomsList();
+  res.json({ added: bots.length, bots: bots.map(b => ({ seat: b.seat, name: b.name })) });
+});
 
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
@@ -87,7 +101,7 @@ io.use(async (socket, next) => {
 const disconnectTimers = new Map<string, NodeJS.Timeout>();
 const DISCONNECT_GRACE_MS = 300000; // 5 minutes
 
-function broadcastState(room: Room | null) {
+function broadcastState(room: Room | null, triggerBots = true) {
   if (!room) return;
   for (const seat of SEAT_ORDER) {
     const socketId = room.seatToSocket.get(seat);
@@ -96,12 +110,60 @@ function broadcastState(room: Room | null) {
       io.to(socketId).emit('gameState', clientState);
     }
   }
-
+  // Auto-trigger bot turns after broadcasting
+  if (triggerBots) {
+    scheduleBotTurn(room);
+  }
 }
 
 // Broadcast updated room list to all connected sockets (for lobby)
 function broadcastRoomsList() {
   io.emit('roomsList', listRooms());
+}
+
+// Schedule bot turn after state broadcast — bots act with a small delay to feel natural
+function scheduleBotTurn(room: Room) {
+  const state = room.state;
+  if (state.phase === GamePhase.WAITING || state.phase === GamePhase.GAME_OVER) return;
+
+  // Check for singing choice pending first
+  if (state.singingChoicePending) {
+    const acted = executeBotSingingChoice(room);
+    if (acted) {
+      setTimeout(() => {
+        broadcastState(room, false);
+        scheduleBotTurn(room);
+      }, 600);
+      return;
+    }
+  }
+
+  // Check if current turn is a bot
+  if (!isBotSeat(room.code, state.currentTurnSeat)) return;
+
+  // Trick pending resolution — wait for it to resolve first
+  if (state.trickPendingResolution) return;
+
+  const delay = state.phase === GamePhase.TRICK_PLAY ? 800 : 500;
+  setTimeout(() => {
+    const acted = executeBotTurn(room);
+    if (acted) {
+      // If trick just completed (4 cards), handle resolution
+      if (state.trickPendingResolution) {
+        broadcastState(room, false);
+        setTimeout(() => {
+          if (state.trickPendingResolution) {
+            resolveTrick(state);
+            broadcastState(room, false);
+            scheduleBotTurn(room);
+          }
+        }, 2500);
+      } else {
+        broadcastState(room, false);
+        scheduleBotTurn(room);
+      }
+    }
+  }, delay);
 }
 
 io.on('connection', (socket) => {
