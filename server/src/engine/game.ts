@@ -119,6 +119,7 @@ function checkTechnicalCapo(state: GameState): { seat: SeatPosition; type: 'king
 export function placeBid(state: GameState, seat: SeatPosition, amount: number): GameState {
   if (state.phase !== GamePhase.BIDDING) return state;
   if (state.currentTurnSeat !== seat) return state;
+  if (!Number.isInteger(amount)) return state; // Must be integer
   if (amount !== 0 && amount < 70) return state;
   if (amount !== 0 && amount % 10 !== 0) return state; // Must be multiple of 10
   if (amount !== 0 && amount <= state.currentBidAmount) return state;
@@ -174,9 +175,19 @@ export function placeBid(state: GameState, seat: SeatPosition, amount: number): 
     state.turnStartedAt = Date.now();
     state.lastMessage = `${state.players[state.currentBidWinner]?.name} זכה בהצעה (${state.currentBidAmount}). בחר אטו.`;
   } else {
-    // All passed - reshuffle
+    // All passed - reshuffle (limit to 10 reshuffles to prevent infinite recursion)
     state.dealerSeat = getNextSeat(state.dealerSeat);
     state.lastMessage = 'כולם עברו. ערבוב מחדש...';
+    if (state.roundNumber > 100) {
+      // Safety: too many reshuffles, force a bid
+      state.currentBidAmount = 70;
+      state.currentBidWinner = getNextSeat(state.dealerSeat);
+      state.biddingTeam = SEAT_TEAM[state.currentBidWinner];
+      state.phase = GamePhase.TRUMP_DECLARATION;
+      state.currentTurnSeat = state.currentBidWinner;
+      state.lastMessage = 'הכפייה: חייבים להתחיל!';
+      return state;
+    }
     return startRound(state);
   }
 
@@ -299,6 +310,9 @@ function finishSingingAfterTrick(state: GameState): GameState {
 export function doneSinging(state: GameState, seat: SeatPosition): GameState {
   if (state.phase !== GamePhase.SINGING) return state;
   if (SEAT_TEAM[seat] !== state.biddingTeam) return state;
+  if (state.singingChoicePending) return state; // Must choose singer first
+  // Only the current turn singer can skip
+  if (state.currentTurnSeat !== seat) return state;
 
   // If singing after a trick win, one suit only — done means skip singing
   if (state.singingAfterTrick) {

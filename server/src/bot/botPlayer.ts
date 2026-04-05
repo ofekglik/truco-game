@@ -6,7 +6,7 @@
 
 import { GameState, GamePhase, SeatPosition, SEAT_ORDER, SEAT_TEAM, Suit } from '../engine/types.js';
 import {
-  placeBid, declareTrump, singCante, doneSinging, chooseSinger, playCard, resolveTrick, startRound
+  placeBid, declareTrump, singCante, doneSinging, chooseSinger, playCard, nextRound
 } from '../engine/game.js';
 import { getValidPlays } from '../engine/tricks.js';
 import { getSingableSuits } from '../engine/singing.js';
@@ -98,8 +98,8 @@ export function executeBotTurn(room: Room): boolean {
       return botPlayCard(state, currentSeat);
 
     case GamePhase.ROUND_SCORING:
-      // Auto-advance to next round
-      startRound(state);
+      // Auto-advance to next round (use nextRound for proper dealer rotation)
+      nextRound(state);
       return true;
 
     default:
@@ -124,7 +124,8 @@ export function executeBotSingingChoice(room: Room): boolean {
 
 function botBid(state: GameState, seat: SeatPosition): boolean {
   // Simple strategy: bid if hand looks strong, else pass
-  const player = state.players[seat]!;
+  const player = state.players[seat];
+  if (!player) return false;
   const hand = player.hand;
 
   // Count high cards (aces and 3s)
@@ -145,7 +146,8 @@ function botBid(state: GameState, seat: SeatPosition): boolean {
 }
 
 function botDeclareTrump(state: GameState, seat: SeatPosition): boolean {
-  const player = state.players[seat]!;
+  const player = state.players[seat];
+  if (!player) return false;
   const hand = player.hand;
 
   // Count cards per suit, pick the suit with most cards
@@ -162,7 +164,8 @@ function botDeclareTrump(state: GameState, seat: SeatPosition): boolean {
 }
 
 function botSing(state: GameState, seat: SeatPosition, roomCode: string): boolean {
-  const player = state.players[seat]!;
+  const player = state.players[seat];
+  if (!player) return false;
 
   // Check if we can sing
   if (state.biddingTeam && SEAT_TEAM[seat] === state.biddingTeam) {
@@ -187,10 +190,14 @@ function botSing(state: GameState, seat: SeatPosition, roomCode: string): boolea
 }
 
 function botPlayCard(state: GameState, seat: SeatPosition): boolean {
-  const player = state.players[seat]!;
+  const player = state.players[seat];
+  if (!player) return false;
   const validPlays = getValidPlays(player.hand, state.currentTrick, state.trumpSuit);
 
-  if (validPlays.length === 0) return false;
+  if (validPlays.length === 0) {
+    console.log(`[bot] WARNING: No valid plays for ${seat}, hand has ${player.hand.length} cards`);
+    return false;
+  }
 
   // Pick a random valid card
   const card = validPlays[Math.floor(Math.random() * validPlays.length)];

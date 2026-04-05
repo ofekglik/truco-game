@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   ClientGameState, GamePhase, SeatPosition, Suit, SUIT_NAMES_HE, SUIT_SYMBOLS,
-  SUIT_COLORS, SEAT_NAMES_HE, SEAT_TEAM, Card as CardType, CARD_POWER
+  SUIT_COLORS, SEAT_NAMES_HE, SEAT_TEAM, Card as CardType, CARD_POWER, CapoType
 } from '../types';
 import { CardComponent, CardBack } from './Card';
 import { Scoreboard } from './Scoreboard';
@@ -82,6 +82,7 @@ export const GameTable: React.FC<GameTableProps> = ({
   const [focusedTrickCard, setFocusedTrickCard] = useState<string | null>(null);
   const [panelCollapsed, setPanelCollapsed] = useState(false);
   const [mobileBidValue, setMobileBidValue] = useState(70);
+  const [capoAnnouncement, setCapoAnnouncement] = useState<{ type: CapoType; playerName: string } | null>(null);
   // completedTrickDisplay removed — server now handles the 2.5s trick display delay
   const handScrollRef = useRef<HTMLDivElement>(null);
   const panelSwipeRef = useRef<{ startY: number } | null>(null);
@@ -122,12 +123,13 @@ export const GameTable: React.FC<GameTableProps> = ({
       setWindowWidth(window.innerWidth);
       setWindowHeight(window.innerHeight);
     };
+    const handleOrientationChange = () => setTimeout(handleResize, 100);
     window.addEventListener('resize', handleResize);
     // Also listen to orientationchange for mobile Safari
-    window.addEventListener('orientationchange', () => setTimeout(handleResize, 100));
+    window.addEventListener('orientationchange', handleOrientationChange);
     return () => {
       window.removeEventListener('resize', handleResize);
-      window.removeEventListener('orientationchange', () => setTimeout(handleResize, 100));
+      window.removeEventListener('orientationchange', handleOrientationChange);
     };
   }, []);
 
@@ -139,6 +141,23 @@ export const GameTable: React.FC<GameTableProps> = ({
   useEffect(() => {
     setPanelCollapsed(false);
   }, [gameState.phase]);
+
+  // Show capo announcement when entering TRUMP_DECLARATION with a capo type
+  const prevPhaseRef = useRef(gameState.phase);
+  useEffect(() => {
+    if (
+      gameState.phase === GamePhase.TRUMP_DECLARATION &&
+      prevPhaseRef.current !== GamePhase.TRUMP_DECLARATION &&
+      gameState.capoType !== CapoType.NONE
+    ) {
+      const declarer = gameState.capoDeclarerSeat
+        ? gameState.players[gameState.capoDeclarerSeat]?.name || '?'
+        : '?';
+      setCapoAnnouncement({ type: gameState.capoType, playerName: declarer });
+      setTimeout(() => setCapoAnnouncement(null), 3500);
+    }
+    prevPhaseRef.current = gameState.phase;
+  }, [gameState.phase, gameState.capoType, gameState.capoDeclarerSeat]);
 
   // Keep mobile bid stepper in sync with current minimum bid
   useEffect(() => {
@@ -167,7 +186,7 @@ export const GameTable: React.FC<GameTableProps> = ({
   useEffect(() => {
     if (gameState.completedTricks.length > lastCompletedTricksLength && gameState.completedTricks.length > 0) {
       const lastTrick = gameState.completedTricks[gameState.completedTricks.length - 1];
-      if (lastTrick.winnerSeat) {
+      if (lastTrick && lastTrick.winnerSeat) {
         const winnerPlayer = gameState.players[lastTrick.winnerSeat];
         if (winnerPlayer) {
           setTrickToast({
@@ -497,7 +516,7 @@ export const GameTable: React.FC<GameTableProps> = ({
             <span className="text-gray-400 text-xs font-medium">הצע סכום</span>
             {gameState.currentBidAmount > 0 ? (
               <span className="text-yellow-400 text-sm font-bold">
-                הצעה נוכחית: {gameState.currentBidAmount} ע״י {gameState.players[gameState.currentBidWinner!]?.name}
+                הצעה נוכחית: {gameState.currentBidAmount} ע״י {gameState.currentBidWinner && gameState.players[gameState.currentBidWinner]?.name}
               </span>
             ) : (
               <span className="text-gray-500 text-xs">אין הצעות עדיין</span>
@@ -1453,6 +1472,27 @@ export const GameTable: React.FC<GameTableProps> = ({
           );
         })()}
       </div>
+
+      {/* Capo announcement overlay */}
+      {capoAnnouncement && (
+        <div className={`${isMobile ? 'fixed' : 'absolute'} inset-0 z-50 bg-black/80 flex items-center justify-center backdrop-blur-md animate-fadeIn`}>
+          <div className="bg-gradient-to-b from-[#2a1a00] to-[#1a1200] border-2 border-yellow-500 rounded-2xl p-6 w-full max-w-sm shadow-2xl mx-4 text-center animate-slideUpBottom">
+            <div className="text-6xl mb-3">
+              {capoAnnouncement.type === CapoType.TECHNICAL ? '👑' : '🔥'}
+            </div>
+            <h2 className="text-2xl font-bold text-yellow-400 mb-2">
+              {capoAnnouncement.type === CapoType.TECHNICAL ? 'קאפו טכני!' : 'קאפו!'}
+            </h2>
+            <p className="text-white text-lg mb-1">{capoAnnouncement.playerName}</p>
+            <p className="text-gray-400 text-sm">
+              {capoAnnouncement.type === CapoType.TECHNICAL
+                ? 'מחזיק 4 מלכים או 4 סוסים — קונה אוטומטית ב-230!'
+                : 'הכריז קאפו — 230 נקודות!'}
+            </p>
+            <p className="text-yellow-500/60 text-xs mt-3">בוחר אטו...</p>
+          </div>
+        </div>
+      )}
 
       {/* Action panels */}
       {renderBiddingPanel()}

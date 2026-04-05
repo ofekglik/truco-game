@@ -5,7 +5,7 @@ import cors from 'cors';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import {
-  createRoom, joinRoom, getRoom, getRoomByCode, removePlayer, isRoomFull, swapSeat, updateRoomSettings, leaveRoom, listRooms, type Room
+  createRoom, joinRoom, getRoom, getRoomByCode, removePlayer, isRoomFull, swapSeat, updateRoomSettings, leaveRoom, listRooms, deleteRoom, type Room
 } from './rooms/roomManager.js';
 import {
   startRound, placeBid, declareTrump, singCante, doneSinging, chooseSinger, playCard, resolveTrick, nextRound, getClientState
@@ -101,6 +101,13 @@ io.use(async (socket, next) => {
 const disconnectTimers = new Map<string, NodeJS.Timeout>();
 const DISCONNECT_GRACE_MS = 300000; // 5 minutes
 
+// Trick resolution timers: Map<roomCode, timeoutId> — prevents double resolution
+const trickResolutionTimers = new Map<string, NodeJS.Timeout>();
+
+// Room cleanup: delete abandoned rooms after 30 minutes of no connected players
+const ROOM_ABANDON_MS = 30 * 60 * 1000;
+const roomCleanupTimers = new Map<string, NodeJS.Timeout>();
+
 function broadcastState(room: Room | null, triggerBots = true) {
   if (!room) return;
   for (const seat of SEAT_ORDER) {
@@ -116,6 +123,48 @@ function broadcastState(room: Room | null, triggerBots = true) {
   }
 }
 
+/** Schedule trick resolution with dedup — only one timer per room at a time */
+function scheduleTrickResolution(room: Room) {
+  // Don't schedule if already pending
+  if (trickResolutionTimers.has(room.code)) return;
+
+  const timer = setTimeout(() => {
+    trickResolutionTimers.delete(room.code);
+    if (room.state.trickPendingResolution) {
+      resolveTrick(room.state);
+      broadcastState(room);
+    }
+  }, 2500);
+  trickResolutionTimers.set(room.code, timer);
+}
+
+/** Schedule room cleanup if all players disconnected */
+function scheduleRoomCleanup(room: Room) {
+  // Cancel any existing timer
+  const existing = roomCleanupTimers.get(room.code);
+  if (existing) clearTimeout(existing);
+
+  const timer = setTimeout(() => {
+    roomCleanupTimers.delete(room.code);
+    // Double-check still empty
+    const connectedPlayers = SEAT_ORDER.filter(s => room.state.players[s]?.connected);
+    if (connectedPlayers.length === 0) {
+      console.log(`[cleanup] Removing abandoned room ${room.code}`);
+      deleteRoom(room.code);
+    }
+  }, ROOM_ABANDON_MS);
+  roomCleanupTimers.set(room.code, timer);
+}
+
+/** Cancel room cleanup (player reconnected) */
+function cancelRoomCleanup(roomCode: string) {
+  const timer = roomCleanupTimers.get(roomCode);
+  if (timer) {
+    clearTimeout(timer);
+    roomCleanupTimers.delete(roomCode);
+  }
+}
+
 // Broadcast updated room list to all connected sockets (for lobby)
 function broadcastRoomsList() {
   io.emit('roomsList', listRooms());
@@ -124,7 +173,7 @@ function broadcastRoomsList() {
 // Schedule bot turn after state broadcast — bots act with a small delay to feel natural
 function scheduleBotTurn(room: Room) {
   const state = room.state;
-  if (state.phase === GamePhase.WAITING || state.phase === GamePhase.GAME_OVER) return;
+  if (state.phase === GamePhase.WAITING || state.phase === GamePhase.GAME_OVER || state.phase === GamePhase.ROUND_SCORING) return;
 
   // Check for singing choice pending first
   if (state.singingChoicePending) {
@@ -141,23 +190,21 @@ function scheduleBotTurn(room: Room) {
   // Check if current turn is a bot
   if (!isBotSeat(room.code, state.currentTurnSeat)) return;
 
-  // Trick pending resolution — wait for it to resolve first
+  // Trick pending resolution — wait for centralized timer to resolve it
   if (state.trickPendingResolution) return;
 
   const delay = state.phase === GamePhase.TRICK_PLAY ? 800 : 500;
   setTimeout(() => {
+    // Re-check: another event may have changed the state
+    if (!isBotSeat(room.code, state.currentTurnSeat)) return;
+    if (state.trickPendingResolution) return;
+
     const acted = executeBotTurn(room);
     if (acted) {
-      // If trick just completed (4 cards), handle resolution
+      // If trick just completed (4 cards), use centralized resolution
       if (state.trickPendingResolution) {
         broadcastState(room, false);
-        setTimeout(() => {
-          if (state.trickPendingResolution) {
-            resolveTrick(state);
-            broadcastState(room, false);
-            scheduleBotTurn(room);
-          }
-        }, 2500);
+        scheduleTrickResolution(room);
       } else {
         broadcastState(room, false);
         scheduleBotTurn(room);
@@ -179,9 +226,9 @@ io.on('connection', (socket) => {
     console.log(`[rejoinRoom] socket=${socket.id}, room=${roomCode}, name=${playerName}`);
 
     // Cancel any pending disconnect timer for a previous socket with this player name
-    // (The old socket ID is gone, but we can check by room+name)
+    // Collect entries first to avoid modifying Map during iteration
+    const toCancel: string[] = [];
     for (const [oldSocketId, timer] of disconnectTimers) {
-      // Check if this timer belongs to the same player in the same room
       const room = getRoomByCode(roomCode);
       if (room) {
         const oldSeat = room.socketToSeat.get(oldSocketId);
@@ -190,11 +237,15 @@ io.on('connection', (socket) => {
           if (oldPlayer && oldPlayer.name.trim().toLowerCase() === playerName.trim().toLowerCase()) {
             console.log(`[rejoinRoom] cancelling disconnect timer for old socket ${oldSocketId}`);
             clearTimeout(timer);
-            disconnectTimers.delete(oldSocketId);
+            toCancel.push(oldSocketId);
           }
         }
       }
     }
+    toCancel.forEach(id => disconnectTimers.delete(id));
+
+    // Cancel room cleanup timer if any
+    cancelRoomCleanup(roomCode);
 
     const result = joinRoom(roomCode, socket.id, playerName, '', undefined, socket.data.userId || undefined);
     if ('error' in result) {
@@ -335,16 +386,13 @@ io.on('connection', (socket) => {
     if (!seat) return;
 
     playCard(room.state, seat, cardId);
-    broadcastState(room);
 
-    // If trick is complete (4 cards), wait 2.5s so players can see all cards, then resolve
+    // If trick is complete (4 cards), use centralized timer to avoid double resolution
     if (room.state.trickPendingResolution) {
-      setTimeout(() => {
-        if (room.state.trickPendingResolution) {
-          resolveTrick(room.state);
-          broadcastState(room);
-        }
-      }, 2500);
+      broadcastState(room, false); // broadcast without triggering bots yet
+      scheduleTrickResolution(room);
+    } else {
+      broadcastState(room);
     }
   });
   
@@ -414,6 +462,11 @@ io.on('connection', (socket) => {
       if (result) {
         io.to(result.room.code).emit('playerLeft', { seat: result.seat });
         broadcastState(result.room);
+        // Schedule room cleanup if all players disconnected
+        const connectedPlayers = SEAT_ORDER.filter(s => result.room.state.players[s]?.connected);
+        if (connectedPlayers.length === 0 && result.room.state.phase !== GamePhase.WAITING) {
+          scheduleRoomCleanup(result.room);
+        }
       }
       broadcastRoomsList();
     }, DISCONNECT_GRACE_MS);

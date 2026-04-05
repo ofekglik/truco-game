@@ -39,6 +39,9 @@ export function useSocket() {
   const [roomsList, setRoomsList] = useState<RoomSummary[]>([]);
 
   useEffect(() => {
+    let socket: Socket | null = null;
+    let cancelled = false;
+
     const setupSocket = async () => {
       let token: string | null = null;
 
@@ -52,7 +55,9 @@ export function useSocket() {
         }
       }
 
-      const socket = io(window.location.origin, {
+      if (cancelled) return; // Component unmounted during async auth
+
+      socket = io(window.location.origin, {
         transports: ['websocket', 'polling'],
         auth: {
           token,
@@ -67,38 +72,62 @@ export function useSocket() {
         const info = roomInfoRef.current;
         if (info) {
           console.log(`[socket] reconnecting to room ${info.roomCode} as ${info.playerName}`);
-          socket.emit('rejoinRoom', { roomCode: info.roomCode, playerName: info.playerName });
+          socket!.emit('rejoinRoom', { roomCode: info.roomCode, playerName: info.playerName });
         }
       });
       socket.on('disconnect', () => {
         setConnected(false);
         setReconnecting(true);
       });
-      socket.on('gameState', (state: ClientGameState) => setGameState(state));
+      socket.on('connect_error', (err) => {
+        console.error('[socket] connection error:', err.message);
+        setConnected(false);
+      });
+      socket.on('gameState', (state: ClientGameState) => {
+        if (state && typeof state === 'object' && state.phase !== undefined) {
+          setGameState(state);
+        } else {
+          console.error('[socket] Invalid gameState received:', state);
+        }
+      });
       socket.on('roomJoined', (data: RoomInfo) => {
-        setRoomInfo(data);
-        roomInfoRef.current = data;
-        saveRoomInfo(data);
-        setError(null);
+        if (data && data.roomCode && data.seat) {
+          setRoomInfo(data);
+          roomInfoRef.current = data;
+          saveRoomInfo(data);
+          setError(null);
+        }
       });
       socket.on('roomError', (msg: string) => {
         setError(msg);
         // If rejoin failed (room no longer exists), clear stored info
-        if (roomInfoRef.current && !gameState) {
+        if (roomInfoRef.current) {
           console.log('[socket] rejoin failed, clearing stored room info');
           roomInfoRef.current = null;
           setRoomInfo(null);
           saveRoomInfo(null);
         }
       });
-      socket.on('roomsList', (rooms: RoomSummary[]) => setRoomsList(rooms));
-
-      return () => {
-        socket.disconnect();
-      };
+      socket.on('roomsList', (rooms: RoomSummary[]) => {
+        if (Array.isArray(rooms)) setRoomsList(rooms);
+      });
     };
 
     setupSocket();
+
+    return () => {
+      cancelled = true;
+      if (socket) {
+        socket.off('connect');
+        socket.off('disconnect');
+        socket.off('connect_error');
+        socket.off('gameState');
+        socket.off('roomJoined');
+        socket.off('roomError');
+        socket.off('roomsList');
+        socket.disconnect();
+      }
+    };
   }, []);
 
   const createRoom = useCallback((name: string, targetScore?: number, avatar?: string, password?: string) => {
