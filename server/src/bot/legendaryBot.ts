@@ -15,39 +15,59 @@ import { getValidPlays } from '../engine/tricks.js';
 import { getSingableSuits } from '../engine/singing.js';
 import { chooseBid, chooseTrump, chooseSinging, chooseSingerChoice, chooseCard } from './strategy.js';
 
-// ─── Cost Tracking ─────────────────────────────────────────────────────────
+// ─── Cost Tracking (per-bot, per-seat) ─────────────────────────────────────
 
-interface CostEntry {
+export interface BotCostEntry {
+  seat: SeatPosition;
   inputTokens: number;
   outputTokens: number;
   cost: number; // USD
+  calls: number;
 }
 
-const roomCosts = new Map<string, CostEntry>();
+export interface RoomCostData {
+  bots: Record<string, BotCostEntry>; // keyed by seat
+  total: { inputTokens: number; outputTokens: number; cost: number; calls: number };
+}
+
+// Map<roomCode, RoomCostData>
+const roomCosts = new Map<string, RoomCostData>();
 
 // Haiku pricing (per million tokens)
 const HAIKU_INPUT_COST = 0.25;   // $0.25 per 1M input tokens
 const HAIKU_OUTPUT_COST = 1.25;  // $1.25 per 1M output tokens
 
-export function getRoomCost(roomCode: string): CostEntry {
-  return roomCosts.get(roomCode) || { inputTokens: 0, outputTokens: 0, cost: 0 };
+export function getRoomCost(roomCode: string): RoomCostData {
+  return roomCosts.get(roomCode) || {
+    bots: {},
+    total: { inputTokens: 0, outputTokens: 0, cost: 0, calls: 0 },
+  };
 }
 
 export function resetRoomCost(roomCode: string): void {
   roomCosts.delete(roomCode);
 }
 
-function addCost(roomCode: string, inputTokens: number, outputTokens: number): CostEntry {
-  const existing = getRoomCost(roomCode);
-  const newInputCost = (inputTokens / 1_000_000) * HAIKU_INPUT_COST;
-  const newOutputCost = (outputTokens / 1_000_000) * HAIKU_OUTPUT_COST;
-  const updated: CostEntry = {
-    inputTokens: existing.inputTokens + inputTokens,
-    outputTokens: existing.outputTokens + outputTokens,
-    cost: existing.cost + newInputCost + newOutputCost,
-  };
-  roomCosts.set(roomCode, updated);
-  return updated;
+function addCost(roomCode: string, seat: SeatPosition, inputTokens: number, outputTokens: number): RoomCostData {
+  const data = getRoomCost(roomCode);
+  const callCost = (inputTokens / 1_000_000) * HAIKU_INPUT_COST + (outputTokens / 1_000_000) * HAIKU_OUTPUT_COST;
+
+  // Per-bot entry
+  const existing = data.bots[seat] || { seat, inputTokens: 0, outputTokens: 0, cost: 0, calls: 0 };
+  existing.inputTokens += inputTokens;
+  existing.outputTokens += outputTokens;
+  existing.cost += callCost;
+  existing.calls += 1;
+  data.bots[seat] = existing;
+
+  // Room total
+  data.total.inputTokens += inputTokens;
+  data.total.outputTokens += outputTokens;
+  data.total.cost += callCost;
+  data.total.calls += 1;
+
+  roomCosts.set(roomCode, data);
+  return data;
 }
 
 // ─── Password Validation ───────────────────────────────────────────────────
@@ -291,7 +311,7 @@ Based on your hand strength, the Monte Carlo analysis, and the bidding history, 
 Respond with ONLY a number (the bid amount, or 0 to pass).`;
 
     const result = await callHaiku(GAME_RULES_PROMPT, userPrompt);
-    addCost(roomCode, result.inputTokens, result.outputTokens);
+    addCost(roomCode, seat, result.inputTokens, result.outputTokens);
 
     const parsed = parseInt(result.text.replace(/[^0-9]/g, ''), 10);
     if (isNaN(parsed)) return chooseBid(state, seat, 'hard');
@@ -334,7 +354,7 @@ Which suit should be trump? Consider: longest suit, high cards in suit, cante po
 Respond with ONLY the suit name in English: oros, copas, espadas, or bastos`;
 
     const result = await callHaiku(GAME_RULES_PROMPT, userPrompt);
-    addCost(roomCode, result.inputTokens, result.outputTokens);
+    addCost(roomCode, seat, result.inputTokens, result.outputTokens);
 
     const suitStr = result.text.toLowerCase().trim();
     const suitMap: Record<string, Suit> = {
@@ -399,7 +419,7 @@ Which card should you play?
 Respond with ONLY the card in format: rank-suit (e.g. "1-oros" for ace of oros). Use English suit names.`;
 
     const result = await callHaiku(GAME_RULES_PROMPT, userPrompt);
-    addCost(roomCode, result.inputTokens, result.outputTokens);
+    addCost(roomCode, seat, result.inputTokens, result.outputTokens);
 
     // Parse response like "1-oros" or "3-copas"
     const match = result.text.match(/(\d+)\s*[-–]\s*(oros|copas|espadas|bastos)/i);

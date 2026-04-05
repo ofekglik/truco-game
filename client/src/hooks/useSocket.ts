@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
-import { ClientGameState, Suit, SeatPosition, RoomSummary, LegendaryBotCost } from '../types';
+import { ClientGameState, Suit, SeatPosition, RoomSummary, RoomCostData } from '../types';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 
 interface RoomInfo {
@@ -38,7 +38,7 @@ export function useSocket() {
   const [roomInfo, setRoomInfo] = useState<RoomInfo | null>(loadRoomInfo());
   const [error, setError] = useState<string | null>(null);
   const [roomsList, setRoomsList] = useState<RoomSummary[]>([]);
-  const [legendaryBotCost, setLegendaryBotCost] = useState<LegendaryBotCost | null>(null);
+  const [legendaryBotCost, setLegendaryBotCost] = useState<RoomCostData | null>(null);
 
   useEffect(() => {
     let socket: Socket | null = null;
@@ -114,8 +114,8 @@ export function useSocket() {
       socket.on('roomsList', (rooms: RoomSummary[]) => {
         if (Array.isArray(rooms)) setRoomsList(rooms);
       });
-      socket.on('legendaryBotCost', (cost: LegendaryBotCost) => {
-        if (cost && typeof cost.cost === 'number') setLegendaryBotCost(cost);
+      socket.on('legendaryBotCost', (cost: RoomCostData) => {
+        if (cost && cost.total && typeof cost.total.cost === 'number') setLegendaryBotCost(cost);
       });
     };
 

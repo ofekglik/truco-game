@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   ClientGameState, GamePhase, SeatPosition, Suit, SUIT_NAMES_HE, SUIT_SYMBOLS,
   SUIT_COLORS, SEAT_NAMES_HE, SEAT_TEAM, Card as CardType, CARD_POWER, CapoType,
-  LegendaryBotCost
+  RoomCostData
 } from '../types';
 import { CardComponent, CardBack } from './Card';
 import { Scoreboard } from './Scoreboard';
@@ -20,7 +20,7 @@ interface GameTableProps {
   onLeaveRoom: () => void;
   reconnecting: boolean;
   connected: boolean;
-  legendaryBotCost: LegendaryBotCost | null;
+  legendaryBotCost: RoomCostData | null;
 }
 
 function getRelativePosition(mySeat: SeatPosition, targetSeat: SeatPosition): 'bottom' | 'left' | 'right' | 'top' {
@@ -1182,18 +1182,6 @@ export const GameTable: React.FC<GameTableProps> = ({
         </div>
       )}
 
-      {/* Legendary Bot Cost Tracker */}
-      {legendaryBotCost && legendaryBotCost.cost > 0 && (
-        <div className="absolute top-4 left-4 z-40 bg-black/60 backdrop-blur-sm border border-yellow-500/30 rounded-lg px-3 py-1.5 text-xs" dir="ltr">
-          <div className="flex items-center gap-2">
-            <span className="text-yellow-400">👑 AI</span>
-            <span className="text-gray-300">${legendaryBotCost.cost.toFixed(4)}</span>
-            <span className="text-gray-500">|</span>
-            <span className="text-gray-400">{(legendaryBotCost.inputTokens + legendaryBotCost.outputTokens).toLocaleString()} tok</span>
-          </div>
-        </div>
-      )}
-
       {/* Hamburger Menu */}
       <button
         onClick={() => setShowMenu(!showMenu)}
@@ -1233,6 +1221,23 @@ export const GameTable: React.FC<GameTableProps> = ({
               >
                 📱 {document.fullscreenElement ? 'צא ממסך מלא' : 'מסך מלא'}
               </button>
+
+              {/* AI Cost Tracking — per bot */}
+              {legendaryBotCost && legendaryBotCost.total.cost > 0 && (
+                <div className="border border-yellow-500/30 bg-black/30 rounded-lg p-3 space-y-2" dir="ltr">
+                  <div className="text-yellow-400 font-bold text-sm flex items-center gap-1">👑 AI Cost</div>
+                  {Object.values(legendaryBotCost.bots).map((bot) => (
+                    <div key={bot.seat} className="flex justify-between text-xs text-gray-300">
+                      <span className="capitalize">{bot.seat}</span>
+                      <span>${bot.cost.toFixed(4)} ({bot.calls} calls)</span>
+                    </div>
+                  ))}
+                  <div className="border-t border-gray-600 pt-1 flex justify-between text-xs font-bold text-yellow-300">
+                    <span>Total</span>
+                    <span>${legendaryBotCost.total.cost.toFixed(4)} | {(legendaryBotCost.total.inputTokens + legendaryBotCost.total.outputTokens).toLocaleString()} tok</span>
+                  </div>
+                </div>
+              )}
 
               <button
                 onClick={() => setShowLeaveConfirm(true)}

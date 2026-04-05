@@ -176,8 +176,15 @@ export const CARD_POWER: Record<Rank, number> = {
 
 export type BotDifficulty = 'easy' | 'medium' | 'hard' | 'legendary';
 
-export interface LegendaryBotCost {
+export interface BotCostEntry {
+  seat: SeatPosition;
   inputTokens: number;
   outputTokens: number;
   cost: number; // USD
+  calls: number;
+}
+
+export interface RoomCostData {
+  bots: Record<string, BotCostEntry>; // keyed by seat
+  total: { inputTokens: number; outputTokens: number; cost: number; calls: number };
 }
