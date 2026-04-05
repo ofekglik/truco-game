@@ -14,6 +14,13 @@ interface WaitingRoomProps {
 
 const SEAT_DISPLAY: SeatPosition[] = ['south', 'east', 'north', 'west'];
 
+const DIFFICULTY_OPTIONS: { value: BotDifficulty; label: string; emoji: string; color: string }[] = [
+  { value: 'easy', label: 'קל', emoji: '🟢', color: 'bg-green-600' },
+  { value: 'medium', label: 'בינוני', emoji: '🟡', color: 'bg-yellow-600' },
+  { value: 'hard', label: 'קשה', emoji: '🔴', color: 'bg-red-600' },
+  { value: 'legendary', label: 'אגדי', emoji: '👑', color: 'bg-amber-600' },
+];
+
 export const WaitingRoom: React.FC<WaitingRoomProps> = ({
   gameState,
   roomCode,
@@ -27,13 +34,63 @@ export const WaitingRoom: React.FC<WaitingRoomProps> = ({
   const [targetScoreEdit, setTargetScoreEdit] = useState(gameState.targetScore);
   const [showScoreEditor, setShowScoreEditor] = useState(false);
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
-  const [botDifficulty, setBotDifficulty] = useState<BotDifficulty>('medium');
-  const [addingBots, setAddingBots] = useState(false);
+  // Per-seat bot difficulty selection
+  const [seatDifficulty, setSeatDifficulty] = useState<Record<string, BotDifficulty>>({});
+  const [addingSeat, setAddingSeat] = useState<string | null>(null);
+  const [removingSeat, setRemovingSeat] = useState<string | null>(null);
   const [legendaryPassword, setLegendaryPassword] = useState('');
   const [legendaryError, setLegendaryError] = useState('');
+  const [showLegendaryInput, setShowLegendaryInput] = useState<string | null>(null);
 
   const playerCount = SEAT_DISPLAY.filter((s) => gameState.players[s] !== null).length;
   const isRoomCreator = gameState.mySeat === 'south';
+
+  const getDifficulty = (seat: SeatPosition): BotDifficulty => seatDifficulty[seat] || 'medium';
+
+  const handleAddBot = async (seat: SeatPosition) => {
+    const difficulty = getDifficulty(seat);
+
+    // If legendary and no password yet, show password input
+    if (difficulty === 'legendary' && showLegendaryInput !== seat) {
+      setShowLegendaryInput(seat);
+      setLegendaryError('');
+      return;
+    }
+
+    setAddingSeat(seat);
+    setLegendaryError('');
+    try {
+      const body: Record<string, string> = { roomCode, seat, difficulty };
+      if (difficulty === 'legendary') body.password = legendaryPassword;
+      const resp = await fetch('/api/bots/seat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!resp.ok) {
+        const err = await resp.json();
+        if (difficulty === 'legendary') {
+          setLegendaryError(resp.status === 401 ? 'סיסמה שגויה' : err.error || 'שגיאה');
+        }
+      } else {
+        setLegendaryPassword('');
+        setShowLegendaryInput(null);
+      }
+    } catch (e) { console.error('Failed to add bot:', e); }
+    setAddingSeat(null);
+  };
+
+  const handleRemoveBot = async (seat: SeatPosition) => {
+    setRemovingSeat(seat);
+    try {
+      await fetch('/api/bots/seat', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ roomCode, seat }),
+      });
+    } catch (e) { console.error('Failed to remove bot:', e); }
+    setRemovingSeat(null);
+  };
 
   const handleUpdateScore = () => {
     if (targetScoreEdit >= 500 && targetScoreEdit <= 2000) {
@@ -42,47 +99,142 @@ export const WaitingRoom: React.FC<WaitingRoomProps> = ({
     }
   };
 
+  const isBot = (seat: SeatPosition): boolean => {
+    const player = gameState.players[seat];
+    return !!player && player.name.includes('בוט');
+  };
+
   const renderSeatSlot = (seat: SeatPosition) => {
     const player = gameState.players[seat];
     const team = SEAT_TEAM[seat];
     const isMySeat = seat === gameState.mySeat;
     const teamColor = team === 'team1' ? '#3B82F6' : '#DC2626';
+    const seatIsBot = isBot(seat);
+    const isEmpty = !player;
+    const difficulty = getDifficulty(seat);
+    const diffOption = DIFFICULTY_OPTIONS.find(d => d.value === difficulty)!;
 
     return (
-      <div key={seat} className="flex items-center gap-3 bg-[#16213e]/60 rounded-xl p-3 border border-gray-600 hover:border-yellow-400 transition-all">
-        {/* Team color indicator */}
-        <div className="w-1 h-10 rounded-full flex-shrink-0" style={{ backgroundColor: teamColor }} />
+      <div key={seat} className="bg-[#16213e]/60 rounded-xl p-3 border border-gray-600 hover:border-yellow-400 transition-all">
+        <div className="flex items-center gap-3">
+          {/* Team color indicator */}
+          <div className="w-1 h-10 rounded-full flex-shrink-0" style={{ backgroundColor: teamColor }} />
 
-        {/* Seat info */}
-        <div className="flex-1 min-w-0">
-          <p className="text-xs text-gray-400 font-medium">{SEAT_NAMES_HE[seat]}</p>
-          {player ? (
-            <div className="flex items-center gap-2 mt-0.5">
-              {player.avatar && <span className="text-base">{player.avatar}</span>}
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-bold text-white truncate">{player.name}</p>
+          {/* Seat info */}
+          <div className="flex-1 min-w-0">
+            <p className="text-xs text-gray-400 font-medium">{SEAT_NAMES_HE[seat]}</p>
+            {player ? (
+              <div className="flex items-center gap-2 mt-0.5">
+                {player.avatar && <span className="text-base">{player.avatar}</span>}
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-bold text-white truncate">{player.name}</p>
+                </div>
+                <div className={`w-2 h-2 rounded-full flex-shrink-0 ${player.connected ? 'bg-green-400' : 'bg-red-400'}`} />
               </div>
-              <div className={`w-2 h-2 rounded-full flex-shrink-0 ${player.connected ? 'bg-green-400' : 'bg-red-400'}`} />
-            </div>
-          ) : (
-            <p className="text-sm text-gray-500 mt-0.5">ריק</p>
-          )}
+            ) : (
+              <p className="text-sm text-gray-500 mt-0.5">ריק</p>
+            )}
+          </div>
+
+          {/* Action buttons */}
+          <div className="flex gap-1.5 flex-shrink-0">
+            {isMySeat ? (
+              <span className="px-3 py-1.5 rounded-lg font-bold text-xs bg-yellow-600/50 text-yellow-300">(אתה)</span>
+            ) : seatIsBot && isRoomCreator ? (
+              <button
+                onClick={() => handleRemoveBot(seat)}
+                disabled={removingSeat === seat}
+                className="px-3 py-1.5 rounded-lg font-bold text-xs bg-red-600/50 hover:bg-red-500/60 text-red-300 border border-red-500/40 transition-all disabled:opacity-50"
+              >
+                {removingSeat === seat ? '...' : '✕ הסר'}
+              </button>
+            ) : player ? (
+              <button
+                onClick={() => onSwapSeat(seat)}
+                className="px-3 py-1.5 rounded-lg font-bold text-xs bg-blue-600 hover:bg-blue-500 text-white transition-colors"
+              >
+                החלף מקום
+              </button>
+            ) : (
+              <button
+                onClick={() => onSwapSeat(seat)}
+                className="px-3 py-1.5 rounded-lg font-bold text-xs bg-green-600 hover:bg-green-500 text-white transition-colors"
+              >
+                שב כאן
+              </button>
+            )}
+          </div>
         </div>
 
-        {/* Action button */}
-        <button
-          onClick={() => onSwapSeat(seat)}
-          disabled={isMySeat}
-          className={`px-3 py-1.5 rounded-lg font-bold text-xs transition-colors whitespace-nowrap flex-shrink-0 ${
-            isMySeat
-              ? 'bg-yellow-600/50 text-yellow-300 cursor-not-allowed'
-              : player
-                ? 'bg-blue-600 hover:bg-blue-500 text-white'
-                : 'bg-green-600 hover:bg-green-500 text-white'
-          }`}
-        >
-          {isMySeat ? '(אתה)' : player ? 'החלף מקום' : 'שב כאן'}
-        </button>
+        {/* Bot controls for empty seats — room creator only */}
+        {isEmpty && isRoomCreator && (
+          <div className="mt-2 pt-2 border-t border-gray-700/50">
+            <div className="flex items-center gap-2">
+              {/* Difficulty picker (compact) */}
+              <div className="flex gap-1 flex-1" dir="ltr">
+                {DIFFICULTY_OPTIONS.map(opt => (
+                  <button
+                    key={opt.value}
+                    onClick={() => {
+                      setSeatDifficulty(prev => ({ ...prev, [seat]: opt.value }));
+                      if (opt.value !== 'legendary') setShowLegendaryInput(null);
+                    }}
+                    className={`flex-1 py-1 rounded text-[10px] font-bold transition-all ${
+                      difficulty === opt.value
+                        ? opt.value === 'legendary'
+                          ? 'bg-gradient-to-b from-yellow-600 to-amber-700 text-white border border-yellow-400'
+                          : 'bg-purple-600 text-white border border-purple-400'
+                        : 'bg-gray-700/50 text-gray-500 border border-gray-600/50 hover:text-gray-300'
+                    }`}
+                    title={opt.label}
+                  >
+                    {opt.emoji}
+                  </button>
+                ))}
+              </div>
+              {/* Add bot button */}
+              <button
+                onClick={() => handleAddBot(seat)}
+                disabled={addingSeat === seat || (difficulty === 'legendary' && showLegendaryInput === seat && !legendaryPassword)}
+                className={`px-3 py-1 rounded font-bold text-xs transition-all disabled:opacity-50 whitespace-nowrap ${
+                  difficulty === 'legendary'
+                    ? 'bg-gradient-to-r from-yellow-600/60 to-amber-600/60 hover:from-yellow-500/70 hover:to-amber-500/70 text-yellow-200 border border-yellow-500/40'
+                    : 'bg-purple-600/50 hover:bg-purple-500/60 text-purple-200 border border-purple-500/40'
+                }`}
+              >
+                {addingSeat === seat ? '...' : `🤖 ${diffOption.emoji}`}
+              </button>
+            </div>
+
+            {/* Legendary password input (shown inline when needed) */}
+            {showLegendaryInput === seat && difficulty === 'legendary' && (
+              <div className="mt-2 space-y-1.5">
+                <div className="flex gap-2">
+                  <input
+                    type="password"
+                    placeholder="סיסמת בוט אגדי..."
+                    value={legendaryPassword}
+                    onChange={(e) => { setLegendaryPassword(e.target.value); setLegendaryError(''); }}
+                    onKeyDown={(e) => { if (e.key === 'Enter' && legendaryPassword) handleAddBot(seat); }}
+                    className="flex-1 bg-gray-700/80 text-white rounded px-2 py-1 text-xs border border-yellow-500/30 focus:border-yellow-400 focus:outline-none placeholder-gray-500"
+                    dir="rtl"
+                    autoFocus
+                  />
+                  <button
+                    onClick={() => handleAddBot(seat)}
+                    disabled={!legendaryPassword || addingSeat === seat}
+                    className="px-2 py-1 bg-yellow-600/60 hover:bg-yellow-500/70 text-yellow-200 text-xs rounded font-bold disabled:opacity-50"
+                  >
+                    👑 הוסף
+                  </button>
+                </div>
+                {legendaryError && (
+                  <p className="text-red-400 text-[10px] text-center">{legendaryError}</p>
+                )}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     );
   };
@@ -198,89 +350,6 @@ export const WaitingRoom: React.FC<WaitingRoomProps> = ({
           <div className="space-y-2">
             {SEAT_DISPLAY.map((seat) => renderSeatSlot(seat))}
           </div>
-
-          {/* Add Bots with difficulty selector */}
-          {playerCount < 4 && isRoomCreator && (
-            <div className="bg-gradient-to-br from-purple-900/30 to-gray-900/50 border border-purple-500/30 rounded-xl p-3 space-y-3">
-              <p className="text-purple-300 text-xs font-bold text-center">🤖 הוסף בוטים ({4 - playerCount} חסרים)</p>
-              <div className="flex gap-2 justify-center" dir="ltr">
-                {([
-                  { value: 'easy' as BotDifficulty, label: 'קל', emoji: '🟢' },
-                  { value: 'medium' as BotDifficulty, label: 'בינוני', emoji: '🟡' },
-                  { value: 'hard' as BotDifficulty, label: 'קשה', emoji: '🔴' },
-                  { value: 'legendary' as BotDifficulty, label: 'אגדי', emoji: '👑' },
-                ]).map(opt => (
-                  <button
-                    key={opt.value}
-                    onClick={() => { setBotDifficulty(opt.value); setLegendaryError(''); }}
-                    className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition-all ${
-                      botDifficulty === opt.value
-                        ? opt.value === 'legendary'
-                          ? 'bg-gradient-to-b from-yellow-600 to-amber-700 text-white border-2 border-yellow-400 shadow-lg shadow-yellow-500/30'
-                          : 'bg-purple-600 text-white border-2 border-purple-400 shadow-lg shadow-purple-500/30'
-                        : 'bg-gray-700/60 text-gray-400 border border-gray-600 hover:border-purple-400/50'
-                    }`}
-                  >
-                    <span className="block text-base">{opt.emoji}</span>
-                    <span>{opt.label}</span>
-                  </button>
-                ))}
-              </div>
-
-              {/* Legendary password input */}
-              {botDifficulty === 'legendary' && (
-                <div className="space-y-2">
-                  <div className="bg-yellow-900/20 border border-yellow-500/30 rounded-lg p-2 text-center">
-                    <p className="text-yellow-300 text-[10px]">🔒 בוט אגדי מופעל על ידי AI — נדרשת סיסמה</p>
-                  </div>
-                  <input
-                    type="password"
-                    placeholder="הזן סיסמה..."
-                    value={legendaryPassword}
-                    onChange={(e) => { setLegendaryPassword(e.target.value); setLegendaryError(''); }}
-                    className="w-full bg-gray-700/80 text-white rounded-lg px-3 py-2 text-sm border border-gray-600 focus:border-yellow-400 focus:outline-none placeholder-gray-500"
-                    dir="rtl"
-                  />
-                  {legendaryError && (
-                    <p className="text-red-400 text-xs text-center">{legendaryError}</p>
-                  )}
-                </div>
-              )}
-
-              <button
-                onClick={async () => {
-                  setAddingBots(true);
-                  setLegendaryError('');
-                  try {
-                    const body: Record<string, string> = { roomCode, difficulty: botDifficulty };
-                    if (botDifficulty === 'legendary') body.password = legendaryPassword;
-                    const resp = await fetch('/api/bots', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify(body),
-                    });
-                    if (!resp.ok) {
-                      const err = await resp.json();
-                      if (botDifficulty === 'legendary') {
-                        setLegendaryError(resp.status === 401 ? 'סיסמה שגויה' : err.error || 'שגיאה');
-                      }
-                    } else {
-                      setLegendaryPassword('');
-                    }
-                  } catch (e) { console.error('Failed to add bots:', e); }
-                  setAddingBots(false);
-                }}
-                disabled={addingBots || (botDifficulty === 'legendary' && !legendaryPassword)}
-                className={`w-full py-2 font-bold text-sm rounded-lg transition-all disabled:opacity-50 ${
-                  botDifficulty === 'legendary'
-                    ? 'bg-gradient-to-r from-yellow-600/50 to-amber-600/50 hover:from-yellow-500/60 hover:to-amber-500/60 text-yellow-200 border border-yellow-500/40'
-                    : 'bg-purple-600/50 hover:bg-purple-500/60 text-purple-200 border border-purple-500/40'
-                }`}
-              >
-                {addingBots ? 'מוסיף...' : botDifficulty === 'legendary' ? '👑 הוסף בוט אגדי' : 'הוסף בוטים'}
-              </button>
-            </div>
-          )}
 
           {/* Start button */}
           <button
