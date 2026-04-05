@@ -108,15 +108,17 @@ RULES:
 - TRICK PLAY: must follow suit. Must overbeat lead suit (unless trump already played in trick). If void: must trump. Must overtrump if possible. Can't overtrump → free play.
 - SCORING: bidding team total >= bid → they score bid amount. Otherwise opponents score bid amount.
 
-CRITICAL STRATEGY:
-- Track which cards have been played. The context tells you EXACTLY what's unseen.
-- If ace of a suit is still unseen, do NOT lead the 3 of that suit — it will be captured.
-- If the ace was already played, the 3 is now the strongest card in that suit — lead it confidently.
-- When partner is winning, dump your lowest-value card.
-- Lead aces from short non-trump suits first to cash guaranteed points.
-- Watch for opponent voids — they will trump your lead suit.
-- When defending: try to prevent the bidding team from reaching their bid. Every point you deny matters.
-- Protect king+horse pairs if you can still sing them.
+CRITICAL CARD PLAY RULES (ranked by importance):
+1. PARTNER WINNING → play your CHEAPEST card (lowest points: 0pts > 2pts > 3pts > 4pts > 10pts > 11pts).
+2. CAN'T WIN → play your CHEAPEST card (lowest points). Never waste valuable cards on lost tricks.
+3. CAN WIN → use the CHEAPEST winning card. Never use ace(11pts) if king(4pts) wins. Never use 3(10pts) if 12(4pts) wins.
+4. LEADING → Lead aces of non-trump suits FIRST (guaranteed win, cash points).
+5. NEVER lead 3 if the ace of that suit is still unseen — the ace WILL capture your 3 (10pts lost).
+6. If ace was played, 3 is now strongest — lead it confidently.
+7. AVOID leading into suits where opponents are void — they will trump you.
+8. Save trumps for cutting (voiding in side suits, then trumping opponent leads).
+9. When defending: deny the bidding team points. Every 10pts you save matters.
+10. Protect king+horse pairs for singing.
 
 Respond with ONLY the requested action in the exact format specified. No explanations.`;
 
@@ -127,38 +129,66 @@ interface AnthropicResponse {
   usage: { input_tokens: number; output_tokens: number };
 }
 
+const MAX_RETRIES = 3;
+const BASE_DELAY_MS = 2000; // 2 seconds initial delay for rate limits
+const MIN_CALL_INTERVAL_MS = 500; // Minimum 500ms between API calls to avoid rate limits
+let lastCallTimestamp = 0;
+
 async function callHaiku(systemPrompt: string, userPrompt: string): Promise<{ text: string; inputTokens: number; outputTokens: number }> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) throw new Error('ANTHROPIC_API_KEY not set');
 
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 150,
-      system: systemPrompt,
-      messages: [{ role: 'user', content: userPrompt }],
-    }),
-  });
+  // Throttle: ensure minimum interval between calls
+  const now = Date.now();
+  const elapsed = now - lastCallTimestamp;
+  if (elapsed < MIN_CALL_INTERVAL_MS) {
+    await new Promise(resolve => setTimeout(resolve, MIN_CALL_INTERVAL_MS - elapsed));
+  }
+  lastCallTimestamp = Date.now();
 
-  if (!response.ok) {
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 150,
+        system: systemPrompt,
+        messages: [{ role: 'user', content: userPrompt }],
+      }),
+    });
+
+    if (response.ok) {
+      const data = await response.json() as AnthropicResponse;
+      const text = data.content.find(c => c.type === 'text')?.text || '';
+      return {
+        text: text.trim(),
+        inputTokens: data.usage.input_tokens,
+        outputTokens: data.usage.output_tokens,
+      };
+    }
+
+    // Rate limited (429) or overloaded (529) — retry with exponential backoff
+    if ((response.status === 429 || response.status === 529) && attempt < MAX_RETRIES) {
+      const retryAfter = response.headers.get('retry-after');
+      const delayMs = retryAfter
+        ? parseInt(retryAfter, 10) * 1000
+        : BASE_DELAY_MS * Math.pow(2, attempt); // 2s, 4s, 8s
+      console.log(`[legendary] Rate limited (${response.status}), retry ${attempt + 1}/${MAX_RETRIES} in ${delayMs}ms`);
+      await new Promise(resolve => setTimeout(resolve, delayMs));
+      continue;
+    }
+
     const errorText = await response.text();
     console.error(`[legendary] Haiku API error ${response.status}:`, errorText);
     throw new Error(`Haiku API error: ${response.status}`);
   }
 
-  const data = await response.json() as AnthropicResponse;
-  const text = data.content.find(c => c.type === 'text')?.text || '';
-  return {
-    text: text.trim(),
-    inputTokens: data.usage.input_tokens,
-    outputTokens: data.usage.output_tokens,
-  };
+  throw new Error('Haiku API: max retries exceeded');
 }
 
 // ─── Decision Functions ────────────────────────────────────────────────────
@@ -174,8 +204,12 @@ function parseSuit(text: string): Suit | null {
 
 /** Parse a card (rank-suit) from LLM response, validating against valid plays */
 function parseCard(text: string, validPlays: Card[]): Card | null {
-  // Try "rank-suit" format (e.g., "1-oros", "3-copas")
-  const match = text.match(/(\d+)\s*[-–]\s*(oros|copas|espadas|bastos)/i);
+  // Strip quotes, asterisks, backticks, and extra whitespace
+  const cleaned = text.replace(/[`*"'""'']/g, '').trim();
+
+  // Try "rank-suit" format (e.g., "1-oros", "3-copas") — match anywhere in text
+  // Support all dash types: hyphen, en-dash, em-dash, minus sign
+  const match = cleaned.match(/(\d+)\s*[-–—−]\s*(oros|copas|espadas|bastos)/i);
   if (match) {
     const rank = parseInt(match[1], 10);
     const suit = match[2].toLowerCase();
@@ -184,12 +218,28 @@ function parseCard(text: string, validPlays: Card[]): Card | null {
   }
 
   // Try "suit-rank" format (e.g., "oros-1")
-  const idMatch = text.match(/(oros|copas|espadas|bastos)\s*[-–]\s*(\d+)/i);
+  const idMatch = cleaned.match(/(oros|copas|espadas|bastos)\s*[-–—−]\s*(\d+)/i);
   if (idMatch) {
     const suit = idMatch[1].toLowerCase();
     const rank = parseInt(idMatch[2], 10);
     const found = validPlays.find(c => c.rank === rank && c.suit === suit);
     if (found) return found;
+  }
+
+  // Try bare "rank suit" without dash (e.g., "1 oros", "ace of oros")
+  const spaceMatch = cleaned.match(/(\d+)\s+(oros|copas|espadas|bastos)/i);
+  if (spaceMatch) {
+    const rank = parseInt(spaceMatch[1], 10);
+    const suit = spaceMatch[2].toLowerCase();
+    const found = validPlays.find(c => c.rank === rank && c.suit === suit);
+    if (found) return found;
+  }
+
+  // Last resort: try matching any valid play's rank+suit anywhere in the text
+  for (const card of validPlays) {
+    if (cleaned.toLowerCase().includes(`${card.rank}`) && cleaned.toLowerCase().includes(card.suit)) {
+      return card;
+    }
   }
 
   return null;
@@ -218,10 +268,14 @@ Your options:
 - ${minHigherBid}+ = BID HIGHER to become bid winner (increments of 10, max 230)
 
 Think about:
-1. How many points will you LOSE in the worst case? Each suit without an ace risks ~15pts.
-2. Your singing potential adds guaranteed points.
-3. Your partner's bidding behavior hints at their strength.
-4. Don't bid more than your hand can realistically support.
+1. COUNT your expected points: aces win ~11pts each. 3s with their ace = safe 10pts. 12s=4pts, 11s=3pts, 10s=2pts.
+2. Singing potential adds guaranteed points (trump cante=40, non-trump=20).
+3. Your partner typically contributes ~15-25 points.
+4. With 3+ aces or 2 aces + singing, bid 80-90. With 1 ace + singing, consider 70-80.
+5. With 0-1 aces and no singing potential, PASS.
+6. NEVER bid above 100 unless you have 3+ aces AND singing potential.
+7. Total available points are only 130. Even a great hand rarely earns more than 110.
+8. If partner already bid, they have strength — a declaration shows support.
 
 Respond with ONLY a number (bid amount, or 0 to pass).`;
 
@@ -359,14 +413,17 @@ export async function legendaryChooseCard(
   try {
     const context = buildTrickPlayContext(state, seat);
 
+    const validPlayStrs = validPlays.map(c => `${c.rank}-${c.suit}`).join(', ');
     const userPrompt = `${context}
 
 ${state.currentTrick.cards.length === 0
   ? 'You are LEADING. Your card sets the lead suit for everyone.'
   : `You are FOLLOWING. Lead suit: ${state.currentTrick.cards[0].card.suit}`}
 
+YOUR VALID PLAYS: ${validPlayStrs}
+You MUST choose one of the cards listed above. No other card is legal.
+
 Use the card tracker, void info, trick history, and strategic warnings above.
-Think about what cards opponents likely hold based on their play patterns.
 Choose the BEST card considering points at stake, position, and remaining tricks.
 
 Respond with ONLY the card: rank-suit (e.g. "1-oros" for ace of oros)`;
@@ -377,10 +434,18 @@ Respond with ONLY the card: rank-suit (e.g. "1-oros" for ace of oros)`;
     const card = parseCard(result.text, validPlays);
     if (card) return card;
 
-    console.log(`[legendary] Could not parse card response: "${result.text}", falling back to MC`);
+    // Check if it parsed a valid format but the card isn't in valid plays
+    const cleaned = result.text.replace(/[`*"'""'']/g, '').trim();
+    const anyCardMatch = cleaned.match(/(\d+)\s*[-–—−]\s*(oros|copas|espadas|bastos)/i);
+    if (anyCardMatch) {
+      console.log(`[legendary] LLM chose ${anyCardMatch[1]}-${anyCardMatch[2]} but it's not in valid plays [${validPlays.map(c => `${c.rank}-${c.suit}`).join(',')}], falling back to heuristic`);
+    } else {
+      console.log(`[legendary] Could not parse card response: "${result.text}", falling back to heuristic`);
+    }
     return chooseCard(state, seat, 'hard');
   } catch (err) {
-    console.error('[legendary] Card fallback to hard:', err);
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn(`[legendary] Card API error (falling back to heuristic): ${msg}`);
     return chooseCard(state, seat, 'hard');
   }
 }

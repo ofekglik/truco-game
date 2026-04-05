@@ -154,12 +154,16 @@ export function placeBid(state: GameState, seat: SeatPosition, amount: number): 
   let passCount = 0;
 
   while (passCount < 4) {
-    // Check if this player already passed
+    // Check if this player already passed or declared
     const playerBids = state.bids.filter(b => b.seat === nextSeat);
     const hasPassed = playerBids.some(b => b.amount === 0);
     const isCurrentWinner = nextSeat === state.currentBidWinner;
+    // A player who declared (bid == current amount but isn't the winner) is done bidding
+    const hasDeclared = !isCurrentWinner && playerBids.some(
+      b => b.amount > 0 && b.amount === state.currentBidAmount
+    );
 
-    if (!hasPassed && !isCurrentWinner) {
+    if (!hasPassed && !isCurrentWinner && !hasDeclared) {
       state.currentTurnSeat = nextSeat;
       state.turnStartedAt = Date.now();
       state.lastMessage = `תור ${state.players[nextSeat]?.name} להציע`;

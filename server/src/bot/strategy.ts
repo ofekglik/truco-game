@@ -172,15 +172,15 @@ function chooseBidMedium(hand: Card[], state: GameState): number {
   }
   if (!bestEval) return 0;
 
-  // Estimate safe bid: hand value × safety factor
-  // Add estimated partner contribution (~25 pts average)
-  const partnerEstimate = 25;
+  // Conservative estimate: hand value × safety factor
+  // Partner contributes ~15 pts average (conservative)
+  const partnerEstimate = 15;
   const teamEstimate = bestEval.total + partnerEstimate;
-  const safetyFactor = 0.75;
+  const safetyFactor = 0.60;
   const safeBid = Math.floor(teamEstimate * safetyFactor / 10) * 10;
 
   const minBid = Math.max(state.currentBidAmount + 10, 70);
-  if (safeBid >= minBid && minBid <= 130) {
+  if (safeBid >= minBid && minBid <= 90) {
     return minBid; // Bid minimum to win, don't overbid
   }
   return 0; // pass
@@ -190,7 +190,7 @@ function chooseBidHard(hand: Card[], state: GameState): number {
   // Monte Carlo bid evaluation: for each possible bid level,
   // simulate games and check win rate
   const minBid = Math.max(state.currentBidAmount + 10, 70);
-  if (minBid > 150) return 0; // don't go crazy
+  if (minBid > 130) return 0; // don't go crazy
 
   // Quick hand eval for upper bound
   let bestEval: HandEval | null = null;
@@ -200,17 +200,18 @@ function chooseBidHard(hand: Card[], state: GameState): number {
   }
   if (!bestEval) return 0;
 
-  // Use MC to validate the bid
+  // Use MC to validate the bid — require higher confidence
   const bestTrump = bestEval.bestTrumpSuit;
-  const successRate = monteCarloEvalBid(hand, bestTrump, minBid, state, 40);
+  const successRate = monteCarloEvalBid(hand, bestTrump, minBid, state, 60);
 
-  if (successRate >= 0.55) {
-    // Check if we can bid higher
-    for (let bid = minBid + 10; bid <= Math.min(minBid + 30, 150); bid += 10) {
-      const rate = monteCarloEvalBid(hand, bestTrump, bid, state, 30);
-      if (rate < 0.50) return bid - 10;
+  // Require 65% success rate (was 55%) — reduce overbidding
+  if (successRate >= 0.65) {
+    // Check if we can bid higher — require even more confidence
+    for (let bid = minBid + 10; bid <= Math.min(minBid + 20, 130); bid += 10) {
+      const rate = monteCarloEvalBid(hand, bestTrump, bid, state, 40);
+      if (rate < 0.60) return bid - 10;
     }
-    return Math.min(minBid + 30, 150);
+    return Math.min(minBid + 20, 130);
   }
 
   return 0; // pass
@@ -350,30 +351,25 @@ function chooseCardMedium(
   }
 
   const leadSuit = trick.cards[0].card.suit;
-  const partnerSeat = getPartnerSeat(seat);
-  const partnerPlayed = trick.cards.find(tc => tc.seat === partnerSeat);
-  const currentWinner = trick.cards.length > 0
-    ? determineTrickWinner({ cards: trick.cards, leadSeat: trick.leadSeat }, trumpSuit)
-    : null;
-  const partnerIsWinning = currentWinner && SEAT_TEAM[currentWinner.seat] === myTeam;
+  const currentWinner = determineTrickWinner({ cards: trick.cards, leadSeat: trick.leadSeat }, trumpSuit);
+  const partnerIsWinning = SEAT_TEAM[currentWinner.seat] === myTeam;
 
-  // Partner is winning — play lowest valid card
-  if (partnerIsWinning && trick.cards.length >= 2) {
+  // Partner is winning — play lowest valid card (by points then power)
+  if (partnerIsWinning) {
     return getLowestCard(validPlays);
   }
 
-  // We need to win this trick
-  // Try to play the cheapest winning card
-  const trickWithMyPlays = validPlays.map(card => {
+  // Opponent is winning — try to win with cheapest card
+  const winningPlays: { card: Card; wins: boolean }[] = [];
+  for (const card of validPlays) {
     const hypoTrick: Trick = {
       cards: [...trick.cards, { card, seat }],
       leadSeat: trick.leadSeat,
     };
     const winner = determineTrickWinner(hypoTrick, trumpSuit);
-    return { card, wins: winner.seat === seat };
-  });
+    if (winner.seat === seat) winningPlays.push({ card, wins: true });
+  }
 
-  const winningPlays = trickWithMyPlays.filter(p => p.wins);
   if (winningPlays.length > 0) {
     // Play the cheapest winning card (minimize point waste)
     return winningPlays.sort((a, b) =>
@@ -389,12 +385,108 @@ function chooseCardMedium(
 function chooseCardHard(
   validPlays: Card[], state: GameState, seat: SeatPosition, hand: Card[]
 ): Card {
-  // Monte Carlo: simulate N games for each valid play, pick best average
-  const SIM_COUNT = 80;
-  return monteCarloChooseCard(validPlays, hand, state, seat, SIM_COUNT);
+  // Use enhanced heuristic that combines medium-level logic with card tracking
+  // MC was causing more harm than good due to playout quality issues
+  return chooseCardEnhanced(validPlays, state, seat, hand);
+}
+
+/**
+ * Enhanced card play: medium-level tactics + card tracking + void awareness.
+ * This replaces pure MC which was suboptimal due to playout quality.
+ */
+function chooseCardEnhanced(
+  validPlays: Card[], state: GameState, seat: SeatPosition, hand: Card[]
+): Card {
+  const trick = state.currentTrick;
+  const myTeam = SEAT_TEAM[seat];
+  const trumpSuit = state.trumpSuit;
+
+  // Leading
+  if (trick.cards.length === 0) {
+    return chooseLeadCard(validPlays, hand, trumpSuit, myTeam, state);
+  }
+
+  const currentWinner = determineTrickWinner({ cards: trick.cards, leadSeat: trick.leadSeat }, trumpSuit);
+  const partnerIsWinning = SEAT_TEAM[currentWinner.seat] === myTeam;
+
+  // Partner winning — play lowest value card
+  if (partnerIsWinning) {
+    return getLowestCard(validPlays);
+  }
+
+  // Opponent winning — check trick value before deciding
+  const trickPointsSoFar = trick.cards.reduce((s, tc) => s + CARD_POINTS[tc.card.rank], 0);
+
+  // Find winning plays
+  const winningPlays: Card[] = [];
+  for (const card of validPlays) {
+    const hypoTrick = { cards: [...trick.cards, { card, seat }], leadSeat: trick.leadSeat };
+    if (determineTrickWinner(hypoTrick, trumpSuit).seat === seat) {
+      winningPlays.push(card);
+    }
+  }
+
+  if (winningPlays.length > 0) {
+    // Sort by points (cheapest first)
+    winningPlays.sort((a, b) =>
+      CARD_POINTS[a.rank] - CARD_POINTS[b.rank] ||
+      CARD_POWER[a.rank] - CARD_POWER[b.rank]
+    );
+
+    const cheapestWinner = winningPlays[0];
+
+    // Cost-benefit: only win if the trick is worth the card spent
+    // If winning costs us a high-value card (10+ pts) and trick has very few points, dump instead
+    if (CARD_POINTS[cheapestWinner.rank] >= 10 && trickPointsSoFar < 5 && trick.cards.length < 3) {
+      // Expensive win for low stakes — dump lowest instead
+      // (There may still be opponents to play who could add points)
+      return getLowestCard(validPlays);
+    }
+
+    return cheapestWinner;
+  }
+
+  // Can't win — play lowest value card
+  return getLowestCard(validPlays);
 }
 
 // ─── Lead Card Heuristics ───────────────────────────────────────────────────
+
+/** Track which cards have been played in completed tricks */
+function getPlayedCards(state: GameState): Set<string> {
+  const played = new Set<string>();
+  for (const trick of state.completedTricks) {
+    for (const tc of trick.cards) played.add(tc.card.id);
+  }
+  return played;
+}
+
+/** Check if a specific card has been played already */
+function isCardPlayed(state: GameState, suit: Suit, rank: Rank): boolean {
+  for (const trick of state.completedTricks) {
+    for (const tc of trick.cards) {
+      if (tc.card.suit === suit && tc.card.rank === rank) return true;
+    }
+  }
+  return false;
+}
+
+/** Detect known voids from trick history */
+function detectKnownVoids(state: GameState): Map<SeatPosition, Set<Suit>> {
+  const voids = new Map<SeatPosition, Set<Suit>>();
+  for (const seat of SEAT_ORDER) voids.set(seat, new Set());
+
+  for (const trick of state.completedTricks) {
+    if (trick.cards.length < 2) continue;
+    const leadSuit = trick.cards[0].card.suit;
+    for (let i = 1; i < trick.cards.length; i++) {
+      if (trick.cards[i].card.suit !== leadSuit) {
+        voids.get(trick.cards[i].seat)!.add(leadSuit);
+      }
+    }
+  }
+  return voids;
+}
 
 function chooseLeadCard(
   validPlays: Card[], hand: Card[], trumpSuit: Suit | null, myTeam: TeamId,
@@ -402,37 +494,62 @@ function chooseLeadCard(
 ): Card {
   // Leading strategy:
   // 1. Lead aces of non-trump suits (guaranteed win, collect points)
-  // 2. Lead from long non-trump suit to establish control
-  // 3. Avoid leading low trumps (save them for cutting)
+  // 2. Lead 3s only if ace of that suit was already played
+  // 3. Lead low cards from short suits (set up future cuts)
+  // 4. Avoid leading into suits where opponents are void (they'll trump)
+  // 5. Avoid leading low trumps (save them for cutting)
 
+  const knownVoids = detectKnownVoids(state);
+
+  // Helper: check if leading a suit is risky (opponents may be void and trump)
+  const isSuitRiskyLead = (suit: Suit): boolean => {
+    if (suit === trumpSuit) return false;
+    const opponents = SEAT_ORDER.filter(s => SEAT_TEAM[s] !== myTeam);
+    return opponents.some(s => knownVoids.get(s)?.has(suit));
+  };
+
+  // 1. Lead aces of non-trump suits (guaranteed win)
   const nonTrumpAces = validPlays.filter(c =>
     c.rank === 1 && c.suit !== trumpSuit
   );
   if (nonTrumpAces.length > 0) {
+    // Prefer aces where opponents aren't void (won't get trumped)
+    const safeAces = nonTrumpAces.filter(c => !isSuitRiskyLead(c.suit));
+    const acesToUse = safeAces.length > 0 ? safeAces : nonTrumpAces;
     // Lead ace of shortest side suit to cash it before getting cut
-    return nonTrumpAces.sort((a, b) =>
+    return acesToUse.sort((a, b) =>
       countSuit(hand, a.suit) - countSuit(hand, b.suit)
     )[0];
   }
 
-  // Lead 3s of non-trump suits if we also hold the ace (combo)
-  const nonTrumpThrees = validPlays.filter(c =>
-    c.rank === 3 && c.suit !== trumpSuit &&
-    hand.some(h => h.suit === c.suit && h.rank === 1)
+  // 2. Lead 3s only if ace was already played (3 is now strongest in suit)
+  const safe3s = validPlays.filter(c =>
+    c.rank === 3 && c.suit !== trumpSuit && isCardPlayed(state, c.suit, 1 as Rank)
   );
-  if (nonTrumpThrees.length > 0) return nonTrumpThrees[0];
+  if (safe3s.length > 0) {
+    const safeSuit3s = safe3s.filter(c => !isSuitRiskyLead(c.suit));
+    if (safeSuit3s.length > 0) return safeSuit3s[0];
+    return safe3s[0];
+  }
 
-  // Lead low cards from short suits (set up future cuts)
+  // 3. Lead low non-trump cards from short suits (set up cuts)
   const nonTrumps = validPlays.filter(c => c.suit !== trumpSuit);
   if (nonTrumps.length > 0) {
-    return nonTrumps.sort((a, b) => {
+    // Prefer suits where opponents aren't void
+    const safeSuits = nonTrumps.filter(c => !isSuitRiskyLead(c.suit));
+    const candidates = safeSuits.length > 0 ? safeSuits : nonTrumps;
+    return candidates.sort((a, b) => {
+      // Prefer lowest points first (don't waste valuable cards leading)
+      const ptsDiff = CARD_POINTS[a.rank] - CARD_POINTS[b.rank];
+      if (ptsDiff !== 0) return ptsDiff;
+      // Then shortest suit
       const suitDiff = countSuit(hand, a.suit) - countSuit(hand, b.suit);
-      if (suitDiff !== 0) return suitDiff; // shorter suit first
+      if (suitDiff !== 0) return suitDiff;
       return CARD_POWER[a.rank] - CARD_POWER[b.rank]; // lower power first
     })[0];
   }
 
-  // Only trumps left — lead lowest
+  // Only trumps left — lead lowest value
   return getLowestCard(validPlays);
 }
 
@@ -597,7 +714,7 @@ function simulateRemainingTricks(
   return myTeam === 'team1' ? team1Points : team2Points;
 }
 
-/** Simple heuristic card selection for simulation playout */
+/** Smart heuristic card selection for simulation playout */
 function simHeuristicPlay(
   validPlays: Card[],
   trick: { cards: TrickCard[]; leadSeat: SeatPosition },
@@ -606,34 +723,60 @@ function simHeuristicPlay(
 ): Card {
   if (validPlays.length === 1) return validPlays[0];
 
-  // If leading: play highest power card (aggressive playout)
-  if (trick.cards.length === 0) {
-    return validPlays.sort((a, b) => CARD_POWER[b.rank] - CARD_POWER[a.rank])[0];
-  }
-
-  // Following: try to win with cheapest winner, else play lowest
   const myTeam = SEAT_TEAM[seat];
-  const currentWinner = determineTrickWinner(
-    { cards: trick.cards, leadSeat: trick.leadSeat }, trumpSuit
-  );
-  const partnerWinning = SEAT_TEAM[currentWinner.seat] === myTeam;
 
-  if (partnerWinning) {
-    // Partner winning — dump lowest
+  // If leading: smart lead (aces first to cash points, then low from short suits)
+  if (trick.cards.length === 0) {
+    // Lead aces of non-trump suits (guaranteed wins)
+    const nonTrumpAces = validPlays.filter(c => c.rank === 1 && c.suit !== trumpSuit);
+    if (nonTrumpAces.length > 0) return nonTrumpAces[0];
+
+    // Lead low non-trump cards (setup cuts, avoid wasting points)
+    const nonTrumps = validPlays.filter(c => c.suit !== trumpSuit);
+    if (nonTrumps.length > 0) {
+      return nonTrumps.sort((a, b) =>
+        CARD_POINTS[a.rank] - CARD_POINTS[b.rank] ||
+        CARD_POWER[a.rank] - CARD_POWER[b.rank]
+      )[0];
+    }
+    // Only trumps — lead lowest
     return validPlays.sort((a, b) =>
       CARD_POINTS[a.rank] - CARD_POINTS[b.rank] ||
       CARD_POWER[a.rank] - CARD_POWER[b.rank]
     )[0];
   }
 
-  // Try to win cheaply
-  for (const card of validPlays.sort((a, b) => CARD_POWER[a.rank] - CARD_POWER[b.rank])) {
-    const hypoCards = [...trick.cards, { card, seat }];
-    const winner = determineTrickWinner({ cards: hypoCards, leadSeat: trick.leadSeat }, trumpSuit);
-    if (winner.seat === seat) return card; // cheapest win
+  // Following: check who's winning
+  const currentWinner = determineTrickWinner(
+    { cards: trick.cards, leadSeat: trick.leadSeat }, trumpSuit
+  );
+  const partnerWinning = SEAT_TEAM[currentWinner.seat] === myTeam;
+
+  if (partnerWinning) {
+    // Partner winning — dump lowest value card (minimize points given away)
+    return validPlays.sort((a, b) =>
+      CARD_POINTS[a.rank] - CARD_POINTS[b.rank] ||
+      CARD_POWER[a.rank] - CARD_POWER[b.rank]
+    )[0];
   }
 
-  // Can't win — play lowest
+  // Opponent winning — try to win with cheapest card (by POINTS first, then power)
+  const winningPlays: Card[] = [];
+  for (const card of validPlays) {
+    const hypoCards = [...trick.cards, { card, seat }];
+    const winner = determineTrickWinner({ cards: hypoCards, leadSeat: trick.leadSeat }, trumpSuit);
+    if (winner.seat === seat) winningPlays.push(card);
+  }
+
+  if (winningPlays.length > 0) {
+    // Pick cheapest winner by points, then by power
+    return winningPlays.sort((a, b) =>
+      CARD_POINTS[a.rank] - CARD_POINTS[b.rank] ||
+      CARD_POWER[a.rank] - CARD_POWER[b.rank]
+    )[0];
+  }
+
+  // Can't win — play lowest value card
   return validPlays.sort((a, b) =>
     CARD_POINTS[a.rank] - CARD_POINTS[b.rank] ||
     CARD_POWER[a.rank] - CARD_POWER[b.rank]
