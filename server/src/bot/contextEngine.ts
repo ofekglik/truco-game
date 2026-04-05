@@ -703,10 +703,10 @@ export function buildTrickPlayContext(state: GameState, seat: SeatPosition): str
     L.push('');
   }
 
-  // ── MC recommendation ──
-  const mcBest = chooseCard(state, seat, 'hard');
-  if (mcBest) {
-    L.push(`MC RECOMMENDATION: ${cardStr(mcBest)}`);
+  // ── Heuristic recommendation (from enhanced bot logic) ──
+  const heuristicBest = chooseCard(state, seat, 'hard');
+  if (heuristicBest) {
+    L.push(`HEURISTIC RECOMMENDATION: ${cardStr(heuristicBest)} — This is the analytically optimal play. Only deviate if you have a strong strategic reason.`);
   }
 
   // ── Valid plays ──
