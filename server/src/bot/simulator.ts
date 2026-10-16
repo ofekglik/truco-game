@@ -10,7 +10,7 @@
 
 import {
   GameState, GamePhase, SeatPosition, SEAT_ORDER, Card, Suit, Bid,
-  Trick, TrickCard, CapoType, TeamId, SEAT_TEAM, CARD_POINTS, CARD_POWER,
+  Trick, TrickCard, TeamId, SEAT_TEAM, CARD_POINTS, CARD_POWER,
   Rank, Cante
 } from '../engine/types.js';
 import { createDeck, shuffleDeck, dealCards } from '../engine/deck.js';
@@ -259,16 +259,6 @@ function runGame(gameNumber: number): GameLog {
       roundLog.hands[seat] = state.players[seat]?.hand.map(cardStr) || [];
     }
 
-    // Handle capo check → might skip directly to trump declaration
-    if (state.phase === GamePhase.TRUMP_DECLARATION && state.capoType === CapoType.TECHNICAL) {
-      // Technical capo — bot declares trump
-      const trump = chooseTrump(state, state.currentTurnSeat, DIFFICULTY);
-      state = declareTrump(state, state.currentTurnSeat, trump);
-      roundLog.bidWinner = state.currentBidWinner;
-      roundLog.bidAmount = 230;
-      roundLog.trumpSuit = trump;
-    }
-
     // Bidding phase
     let biddingLoops = 0;
     while (state.phase === GamePhase.BIDDING && biddingLoops < 100) {
@@ -454,15 +444,6 @@ function runGameV2(gameNumber: number): GameLog {
 
     for (const seat of SEAT_ORDER) {
       roundLog.hands[seat] = state.players[seat]?.hand.map(cardStr) || [];
-    }
-
-    // Handle technical capo
-    if (state.phase === GamePhase.TRUMP_DECLARATION && state.capoType === CapoType.TECHNICAL) {
-      const trump = chooseTrump(state, state.currentTurnSeat, DIFFICULTY);
-      state = declareTrump(state, state.currentTurnSeat, trump);
-      roundLog.bidWinner = state.currentBidWinner;
-      roundLog.bidAmount = 230;
-      roundLog.trumpSuit = trump;
     }
 
     // Bidding

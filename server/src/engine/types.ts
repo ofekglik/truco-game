@@ -57,7 +57,6 @@ export interface Player {
 export enum GamePhase {
   WAITING = 'waiting',
   DEALING = 'dealing',
-  CAPO_CHECK = 'capo_check',
   BIDDING = 'bidding',
   TRUMP_DECLARATION = 'trump_declaration',
   SINGING = 'singing',
@@ -91,7 +90,7 @@ export interface Cante {
 
 export enum CapoType {
   NONE = 'none',
-  TECHNICAL = 'technical', // 4 kings or 4 horses
+  TECHNICAL = 'technical', // bid capo won on the first trick by a buyer holding 4 kings or 4 horses
   BID = 'bid',             // bid 230
 }
 

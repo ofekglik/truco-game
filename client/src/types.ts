@@ -59,7 +59,6 @@ export const SEAT_TEAM: Record<SeatPosition, TeamId> = {
 export enum GamePhase {
   WAITING = 'waiting',
   DEALING = 'dealing',
-  CAPO_CHECK = 'capo_check',
   BIDDING = 'bidding',
   TRUMP_DECLARATION = 'trump_declaration',
   SINGING = 'singing',

@@ -144,13 +144,14 @@ export const GameTable: React.FC<GameTableProps> = ({
     setPanelCollapsed(false);
   }, [gameState.phase]);
 
-  // Show capo announcement when entering TRUMP_DECLARATION with a capo type
+  // Show capo announcement when a capo is bid, and when a technical capo wins it on the first trick
   const prevPhaseRef = useRef(gameState.phase);
   useEffect(() => {
+    const enteredPhase = (phase: GamePhase) =>
+      gameState.phase === phase && prevPhaseRef.current !== phase;
     if (
-      gameState.phase === GamePhase.TRUMP_DECLARATION &&
-      prevPhaseRef.current !== GamePhase.TRUMP_DECLARATION &&
-      gameState.capoType !== CapoType.NONE
+      (enteredPhase(GamePhase.TRUMP_DECLARATION) && gameState.capoType === CapoType.BID) ||
+      (enteredPhase(GamePhase.ROUND_SCORING) && gameState.capoType === CapoType.TECHNICAL)
     ) {
       const declarer = gameState.capoDeclarerSeat
         ? gameState.players[gameState.capoDeclarerSeat]?.name || '?'
@@ -1505,10 +1506,12 @@ export const GameTable: React.FC<GameTableProps> = ({
             <p className="text-white text-lg mb-1">{capoAnnouncement.playerName}</p>
             <p className="text-gray-400 text-sm">
               {capoAnnouncement.type === CapoType.TECHNICAL
-                ? 'מחזיק 4 מלכים או 4 סוסים — קונה אוטומטית ב-230!'
+                ? 'מחזיק 4 מלכים או 4 סוסים ולקח את הלקיחה הראשונה — 230 נקודות!'
                 : 'הכריז קאפו — 230 נקודות!'}
             </p>
-            <p className="text-yellow-500/60 text-xs mt-3">בוחר אטו...</p>
+            {capoAnnouncement.type === CapoType.BID && (
+              <p className="text-yellow-500/60 text-xs mt-3">בוחר אטו...</p>
+            )}
           </div>
         </div>
       )}

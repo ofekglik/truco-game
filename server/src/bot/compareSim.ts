@@ -6,7 +6,7 @@
 
 import {
   GameState, GamePhase, SeatPosition, SEAT_ORDER, Card, Suit,
-  CapoType, TeamId, SEAT_TEAM, CARD_POINTS, CARD_POWER, Rank
+  TeamId, SEAT_TEAM, CARD_POINTS, CARD_POWER, Rank
 } from '../engine/types.js';
 import { determineTrickWinner, calculateTrickPoints } from '../engine/scoring.js';
 import { getValidPlays, getNextSeat } from '../engine/tricks.js';
@@ -40,12 +40,6 @@ function runGame(difficulty: BotDifficulty): { rounds: number; falls: number; wi
   while (state.scores.team1 < TARGET && state.scores.team2 < TARGET && safety < 200) {
     safety++;
     state = startRound(state);
-
-    // Technical capo
-    if (state.phase === GamePhase.TRUMP_DECLARATION && state.capoType === CapoType.TECHNICAL) {
-      const trump = chooseTrump(state, state.currentTurnSeat, difficulty);
-      state = declareTrump(state, state.currentTurnSeat, trump);
-    }
 
     // Bidding
     let bl = 0;
