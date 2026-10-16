@@ -12,7 +12,7 @@
 
 import {
   GameState, GamePhase, SeatPosition, SEAT_ORDER, Card, Suit,
-  CapoType, TeamId, SEAT_TEAM, CARD_POINTS, CARD_POWER, Rank
+  TeamId, SEAT_TEAM, CARD_POINTS, CARD_POWER, Rank
 } from '../engine/types.js';
 import { createDeck, shuffleDeck, dealCards } from '../engine/deck.js';
 import { determineTrickWinner, calculateTrickPoints } from '../engine/scoring.js';
@@ -110,22 +110,6 @@ async function runLLMRound(state: GameState, roundNum: number): Promise<{ state:
   for (const seat of SEAT_ORDER) {
     const hand = state.players[seat]?.hand.map(cardStr).join(', ');
     console.log(`  ${seat}: [${hand}]`);
-  }
-
-  // Handle technical capo
-  if (state.phase === GamePhase.TRUMP_DECLARATION && state.capoType === CapoType.TECHNICAL) {
-    const seat = state.currentTurnSeat;
-    if (isLLMSeat(seat)) {
-      const llmTrump = await legendaryChooseTrump(state, seat, ROOM_CODE);
-      const heuristicTrump = chooseTrump(state, seat, 'hard');
-      console.log(`  Technical capo by ${seat}: LLM trump=${llmTrump}, Heuristic trump=${heuristicTrump}`);
-      state = declareTrump(state, seat, llmTrump);
-      analysis.trumpChoice = { llm: llmTrump, heuristic: heuristicTrump };
-    } else {
-      const trump = chooseTrump(state, seat, 'hard');
-      console.log(`  Technical capo by ${seat}: Heuristic trump=${trump}`);
-      state = declareTrump(state, seat, trump);
-    }
   }
 
   // Bidding

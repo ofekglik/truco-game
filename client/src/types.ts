@@ -59,7 +59,6 @@ export const SEAT_TEAM: Record<SeatPosition, TeamId> = {
 export enum GamePhase {
   WAITING = 'waiting',
   DEALING = 'dealing',
-  CAPO_CHECK = 'capo_check',
   BIDDING = 'bidding',
   TRUMP_DECLARATION = 'trump_declaration',
   SINGING = 'singing',
@@ -136,6 +135,7 @@ export interface ClientGameState {
   trumpSuit: Suit | null;
   capoType: CapoType;
   capoDeclarerSeat: SeatPosition | null;
+  capoFourOfAKindRank: Rank | null; // revealed only once a technical capo is won
   cantes: Cante[];
   singingDone: boolean;
   singingChoicePending: boolean;
