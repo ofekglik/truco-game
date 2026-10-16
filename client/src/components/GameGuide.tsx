@@ -379,7 +379,7 @@ export const GameGuide: React.FC<GameGuideProps> = ({ onClose }) => {
           <div className="bg-gray-800/60 rounded-xl p-3 space-y-2">
             <p className="text-yellow-400 text-xs font-bold text-center">שני סוגי קאפו:</p>
             <p className="text-gray-300 text-xs leading-relaxed">
-              🔹 <strong>קאפו טכני</strong> — 4 מלכים או 4 סוסים ביד? קאפו אוטומטי! רק לקיחה אחת נדרשת.
+              🔹 <strong>קאפו טכני</strong> — קנית קאפו עם 4 מלכים או 4 סוסים ביד? אם הקבוצה שלך לוקחת את הלקיחה הראשונה — הקאפו הצליח!
             </p>
             <p className="text-gray-300 text-xs leading-relaxed">
               🔹 <strong>קאפו בקנייה</strong> — שחקן מכריז קאפו (230 נקודות). אם הצד השני לוקח ולו לקיחה אחת — הקאפו נכשל!

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   ClientGameState, GamePhase, SeatPosition, Suit, SUIT_NAMES_HE, SUIT_SYMBOLS,
   SUIT_COLORS, SEAT_NAMES_HE, SEAT_TEAM, Card as CardType, CARD_POWER, CapoType,
-  RoomCostData
+  RoomCostData, Rank
 } from '../types';
 import { CardComponent, CardBack } from './Card';
 import { Scoreboard } from './Scoreboard';
@@ -84,7 +84,7 @@ export const GameTable: React.FC<GameTableProps> = ({
   const [focusedTrickCard, setFocusedTrickCard] = useState<string | null>(null);
   const [panelCollapsed, setPanelCollapsed] = useState(false);
   const [mobileBidValue, setMobileBidValue] = useState(70);
-  const [capoAnnouncement, setCapoAnnouncement] = useState<{ type: CapoType; playerName: string } | null>(null);
+  const [capoAnnouncement, setCapoAnnouncement] = useState<{ type: CapoType; playerName: string; fourOfAKindRank: Rank | null } | null>(null);
   // completedTrickDisplay removed — server now handles the 2.5s trick display delay
   const handScrollRef = useRef<HTMLDivElement>(null);
   const panelSwipeRef = useRef<{ startY: number } | null>(null);
@@ -149,18 +149,24 @@ export const GameTable: React.FC<GameTableProps> = ({
   useEffect(() => {
     const enteredPhase = (phase: GamePhase) =>
       gameState.phase === phase && prevPhaseRef.current !== phase;
+    // A technical capo can end the game, so the round may end in GAME_OVER instead of ROUND_SCORING
+    const roundEnded = enteredPhase(GamePhase.ROUND_SCORING) || enteredPhase(GamePhase.GAME_OVER);
     if (
       (enteredPhase(GamePhase.TRUMP_DECLARATION) && gameState.capoType === CapoType.BID) ||
-      (enteredPhase(GamePhase.ROUND_SCORING) && gameState.capoType === CapoType.TECHNICAL)
+      (roundEnded && gameState.capoType === CapoType.TECHNICAL)
     ) {
       const declarer = gameState.capoDeclarerSeat
         ? gameState.players[gameState.capoDeclarerSeat]?.name || '?'
         : '?';
-      setCapoAnnouncement({ type: gameState.capoType, playerName: declarer });
+      setCapoAnnouncement({
+        type: gameState.capoType,
+        playerName: declarer,
+        fourOfAKindRank: gameState.capoFourOfAKindRank,
+      });
       setTimeout(() => setCapoAnnouncement(null), 3500);
     }
     prevPhaseRef.current = gameState.phase;
-  }, [gameState.phase, gameState.capoType, gameState.capoDeclarerSeat]);
+  }, [gameState.phase, gameState.capoType, gameState.capoDeclarerSeat, gameState.capoFourOfAKindRank]);
 
   // Keep mobile bid stepper in sync with current minimum bid
   useEffect(() => {
@@ -1506,7 +1512,7 @@ export const GameTable: React.FC<GameTableProps> = ({
             <p className="text-white text-lg mb-1">{capoAnnouncement.playerName}</p>
             <p className="text-gray-400 text-sm">
               {capoAnnouncement.type === CapoType.TECHNICAL
-                ? 'מחזיק 4 מלכים או 4 סוסים ולקח את הלקיחה הראשונה — 230 נקודות!'
+                ? `${capoAnnouncement.fourOfAKindRank === 12 ? '4 מלכים' : '4 סוסים'} — הקבוצה לקחה את הלקיחה הראשונה. 230 נקודות!`
                 : 'הכריז קאפו — 230 נקודות!'}
             </p>
             {capoAnnouncement.type === CapoType.BID && (

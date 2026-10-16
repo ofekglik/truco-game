@@ -10,6 +10,10 @@ import { getSingableSuits } from './singing.js';
 
 const CAPO_BID_AMOUNT = 230;
 const TECHNICAL_CAPO_RANKS: Rank[] = [12, 11]; // kings, horses
+const FOUR_OF_A_KIND_NAMES_HE: Partial<Record<Rank, string>> = {
+  12: '4 מלכים',
+  11: '4 סוסים',
+};
 
 export function createInitialState(): GameState {
   return {
@@ -25,6 +29,7 @@ export function createInitialState(): GameState {
     trumpSuit: null,
     capoType: CapoType.NONE,
     capoDeclarerSeat: null,
+    capoFourOfAKindRank: null,
     cantes: [],
     singingDone: false,
     singingAfterTrick: false,
@@ -73,6 +78,7 @@ export function startRound(state: GameState): GameState {
   state.trumpSuit = null;
   state.capoType = CapoType.NONE;
   state.capoDeclarerSeat = null;
+  state.capoFourOfAKindRank = null;
   state.cantes = [];
   state.singingDone = false;
   state.singingAfterTrick = false;
@@ -88,18 +94,9 @@ export function startRound(state: GameState): GameState {
   return state;
 }
 
-// Technical capo: a capo buyer holding 4 kings or 4 horses wins the capo by taking the first trick
-function capoBuyerHasFourOfAKind(state: GameState): boolean {
-  const buyerSeat = state.capoDeclarerSeat;
-  if (!buyerSeat) return false;
-
-  const playedCards = state.completedTricks
-    .flatMap(trick => trick.cards)
-    .filter(tc => tc.seat === buyerSeat)
-    .map(tc => tc.card);
-  const dealtHand = [...(state.players[buyerSeat]?.hand || []), ...playedCards];
-
-  return TECHNICAL_CAPO_RANKS.some(rank => dealtHand.filter(c => c.rank === rank).length === 4);
+// Technical capo: a capo buyer holding 4 kings or 4 horses wins the capo when their team takes the first trick
+function findFourOfAKindRank(hand: Card[]): Rank | null {
+  return TECHNICAL_CAPO_RANKS.find(rank => hand.filter(c => c.rank === rank).length === 4) ?? null;
 }
 
 export function placeBid(state: GameState, seat: SeatPosition, amount: number): GameState {
@@ -126,6 +123,7 @@ export function placeBid(state: GameState, seat: SeatPosition, amount: number): 
       // Bid capo
       state.capoType = CapoType.BID;
       state.capoDeclarerSeat = seat;
+      state.capoFourOfAKindRank = findFourOfAKindRank(state.players[seat]?.hand || []);
       state.biddingTeam = SEAT_TEAM[seat];
       state.phase = GamePhase.TRUMP_DECLARATION;
       state.currentTurnSeat = seat;
@@ -422,8 +420,8 @@ export function resolveTrick(state: GameState): GameState {
       return endRound(state);
     }
 
-    // Technical capo: buyer's four of a kind wins the capo once the first trick is taken
-    if (state.completedTricks.length === 1 && capoBuyerHasFourOfAKind(state)) {
+    // Technical capo: buyer's four of a kind wins the capo once their team takes the first trick
+    if (state.completedTricks.length === 1 && state.capoFourOfAKindRank) {
       state.capoType = CapoType.TECHNICAL;
       return endRound(state);
     }
@@ -434,8 +432,8 @@ export function resolveTrick(state: GameState): GameState {
     return endRound(state);
   }
 
-  // Check if winner is on bidding team and can sing (one sing per trick win)
-  if (state.biddingTeam && winnerTeam === state.biddingTeam && state.trumpSuit && state.currentBidWinner) {
+  // Check if winner is on bidding team and can sing (one sing per trick win, no singing in capo)
+  if (state.capoType === CapoType.NONE && state.biddingTeam && winnerTeam === state.biddingTeam && state.trumpSuit && state.currentBidWinner) {
     const buyerSeat = state.currentBidWinner;
     const partnerSeat = getTeammate(buyerSeat);
     const buyerCanSing = canSeatSing(state, buyerSeat);
@@ -524,7 +522,8 @@ function endRound(state: GameState): GameState {
 
     state.roundHistory.push(roundScore);
     if (state.capoType === CapoType.TECHNICAL) {
-      state.lastMessage = `${state.players[state.capoDeclarerSeat!]?.name} - קאפו טכני! 230 נקודות!`;
+      const fourOfAKind = FOUR_OF_A_KIND_NAMES_HE[state.capoFourOfAKindRank!];
+      state.lastMessage = `${state.players[state.capoDeclarerSeat!]?.name} - קאפו טכני (${fourOfAKind})! 230 נקודות!`;
     } else {
       state.lastMessage = capoSucceeded ? 'קאפו הצליח! 230 נקודות!' : 'קאפו נכשל!';
     }
@@ -631,6 +630,7 @@ export function getClientState(state: GameState, seat: SeatPosition): ClientGame
     trumpSuit: state.trumpSuit,
     capoType: state.capoType,
     capoDeclarerSeat: state.capoDeclarerSeat,
+    capoFourOfAKindRank: state.capoType === CapoType.TECHNICAL ? state.capoFourOfAKindRank : null,
     cantes: state.cantes,
     singingDone: state.singingDone,
     singingChoicePending: state.singingChoicePending,

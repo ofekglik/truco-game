@@ -125,6 +125,7 @@ export interface GameState {
   // Capo
   capoType: CapoType;
   capoDeclarerSeat: SeatPosition | null;
+  capoFourOfAKindRank: Rank | null; // capo buyer's four of a kind (kings/horses), set when 230 is bid
 
   // Singing
   cantes: Cante[];
@@ -166,6 +167,7 @@ export interface ClientGameState {
   trumpSuit: Suit | null;
   capoType: CapoType;
   capoDeclarerSeat: SeatPosition | null;
+  capoFourOfAKindRank: Rank | null; // revealed only once a technical capo is won
   cantes: Cante[];
   singingDone: boolean;
   singingChoicePending: boolean;

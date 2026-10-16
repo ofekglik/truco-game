@@ -135,6 +135,7 @@ export interface ClientGameState {
   trumpSuit: Suit | null;
   capoType: CapoType;
   capoDeclarerSeat: SeatPosition | null;
+  capoFourOfAKindRank: Rank | null; // revealed only once a technical capo is won
   cantes: Cante[];
   singingDone: boolean;
   singingChoicePending: boolean;
